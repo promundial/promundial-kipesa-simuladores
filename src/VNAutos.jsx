@@ -31,10 +31,11 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRODUCTIVIDAD COMERCIAL                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  productividad:        {mean:8,std:1.5,min:3,max:15,label:"Unidades / vendedor / mes",unit:"u",group:"prod",lever:true,dir:1},
-  sueldo_base:          {mean:800,std:100,min:400,max:1500,label:"Sueldo base vendedor / mes",unit:"$",group:"prod",lever:false},
-  comision_por_u:       {mean:200,std:50,min:50,max:500,label:"Comisión por unidad vendida",unit:"$",group:"prod",lever:false},
-  gerente_ventas:       {mean:3000,std:400,min:1500,max:6000,label:"Sueldo gerente ventas / mes",unit:"$",group:"prod",lever:false},
+  vendedores_fte:        {mean:8,std:0,min:1,max:100,label:"Vendedores FTE (dotación actual)",unit:"u",group:"prod",lever:true,dir:1},
+  productividad:         {mean:8,std:1.5,min:3,max:15,label:"Unidades / vendedor / mes (capacidad)",unit:"u",group:"prod",lever:true,dir:1},
+  sueldo_base:           {mean:800,std:100,min:400,max:1500,label:"Sueldo base vendedor / mes",unit:"$",group:"prod",lever:false},
+  comision_por_u:        {mean:200,std:50,min:50,max:500,label:"Comisión por unidad vendida",unit:"$",group:"prod",lever:false},
+  gerente_ventas:        {mean:3000,std:400,min:1500,max:6000,label:"Sueldo gerente ventas / mes",unit:"$",group:"prod",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  MARKETING                                               ║
@@ -114,28 +115,42 @@ function precioListaMedio(mix){
   const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
   return mix.reduce((s,c)=>s+(c.mix_pct/total)*c.precio_mean,0);
 }
-// Desviación estándar implícita ponderada del precio — para display
+// Desviación estándar implícita ponderada del precio.
+// Solo captura la variabilidad DENTRO de cada categoría (precio_std por categoría).
+// La dispersión ENTRE categorías ya la captura el mix variable — no se duplica aquí.
+// Con todos los σ = 0, el resultado es ±$0 como se espera.
 function precioListaStd(mix){
   const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
-  const mu=precioListaMedio(mix);
-  return Math.sqrt(mix.reduce((s,c)=>{
-    const w=c.mix_pct/total;
-    return s+w*(c.precio_std**2+(c.precio_mean-mu)**2);
-  },0));
+  return Math.sqrt(mix.reduce((s,c)=>s+(c.mix_pct/total)*c.precio_std**2,0));
 }
 
 // ═══ SIMULATION ═══
 function simOnce(P, mix){
   let tIngVN=0,tCOGS=0,tUVN=0,tVend=0,tIngLista=0,tDescuento=0,tPrecioListaSum=0,tMeses=0;
-  let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0,tInvTotal=0;
+  let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0,tInvTotal=0,tUtilizacion=0,tProstPerd=0;
 
   for(let m=0;m<12;m++){
-    // Funnel
-    const leads=Math.round(S(P.leads_mes));
-    const conv=S(P.tasa_conversion)/100;
-    const aprobados=Math.round(leads*conv);
-    const caida=S(P.devoluciones)/100;
-    const uVN=Math.round(aprobados*(1-caida));
+    // ── Funnel ──────────────────────────────────────────────────────────
+    // Demanda potencial: leads → conversión → neto de devoluciones
+    const leads        = Math.round(S(P.leads_mes));
+    const conv         = S(P.tasa_conversion)/100;
+    const caida        = S(P.devoluciones)/100;
+    const demandaMes   = Math.round(leads * conv * (1 - caida));
+
+    // Capacidad instalada: FTE × productividad individual
+    const vendFTE      = Math.max(1, Math.round(S(P.vendedores_fte)));
+    const prod         = Math.max(0.1, S(P.productividad));
+    const capacidadMax = Math.floor(vendFTE * prod);
+
+    // Unidades vendidas = mínimo entre demanda y capacidad
+    const uVN          = Math.min(demandaMes, capacidadMax);
+
+    // KPIs de utilización
+    const utilizacion  = capacidadMax > 0 ? uVN / capacidadMax : 0;   // % capacidad usada
+    const prospectosPerdidos = Math.max(0, demandaMes - capacidadMax); // demanda no atendida
+
+    tUtilizacion  += utilizacion;
+    tProstPerd    += prospectosPerdidos;
     const precioLista=samplePrecioLista(mix);
     const mbBase=S(P.margen_bruto_pct)/100;      // margen negociado con el importador
     const costoAdqUnit=precioLista*(1-mbBase);    // costo fijo al importador — no cambia con el descuento
@@ -151,10 +166,10 @@ function simOnce(P, mix){
     tUVN+=uVN;
     tPrecioListaSum+=precioLista; tMeses++;
 
-    // Headcount from productivity
-    const prod=S(P.productividad);
-    const vendN=Math.ceil(uVN/Math.max(1,prod)); tVend+=vendN;
-    tGVend+=vendN*S(P.sueldo_base)+uVN*S(P.comision_por_u)+S(P.gerente_ventas);
+    // Nómina: se paga la dotación FTE completa independiente de si hay demanda
+    // vendedores_necesarios es informativo — cuántos necesitarías para cubrir la demanda
+    tVend += vendFTE;
+    tGVend += vendFTE * S(P.sueldo_base) + uVN * S(P.comision_por_u) + S(P.gerente_ventas);
 
     // Marketing
     tGMktg+=S(P.gasto_marketing);
@@ -217,7 +232,8 @@ function simOnce(P, mix){
     gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
     ebitda,ebit,utilidadNeta:un,eva,
     downpaymentsCartera,capitalNeto,
-    uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,margenRealPct,rotInv,invPromedio,
+    uVN:tUVN,vendProm:tVend/12,utilizacion:tUtilizacion/12,prospectosPerdidos:tProstPerd/12,
+    costoAdq,margenPorU,margenRealPct,rotInv,invPromedio,
   };
 }
 function runSim(P,n,mix){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P,mix));return r;}
@@ -541,7 +557,8 @@ export default function VNMonteCarlo(){
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
       downpaymentsCartera:ex("downpaymentsCartera"),capitalNeto:ex("capitalNeto"),
-      uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),margenRealPct:ex("margenRealPct"),invPromedio:ex("invPromedio"),
+      uVN:ex("uVN"),vendProm:ex("vendProm"),utilizacion:ex("utilizacion"),prospectosPerdidos:ex("prospectosPerdidos"),
+      costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),margenRealPct:ex("margenRealPct"),invPromedio:ex("invPromedio"),
     };
   },[results]);
 
@@ -644,6 +661,38 @@ export default function VNMonteCarlo(){
             if(!keys.length)return null;
             return(<Section key={gk} title={gc.t} icon={gc.i} color={gc.c} defaultOpen={["funnel","precio","prod"].includes(gk)}>
               {keys.map(k=><PI key={k} k={k} p={PD[k]} val={params[k]} onChange={chg} hl={gsLevers[k]}/>)}
+              {gk==="prod"&&(()=>{
+                const demanda = Math.round(params.leads_mes.mean * params.tasa_conversion.mean/100 * (1 - params.devoluciones.mean/100));
+                const capacidad = Math.round(params.vendedores_fte.mean * params.productividad.mean);
+                const cuello = demanda > capacidad;
+                const utilizacion = capacidad > 0 ? Math.min(100, (demanda/capacidad)*100) : 0;
+                return(
+                  <div style={{marginTop:6,padding:"7px 10px",borderRadius:4,
+                    background:cuello?`${C.red}12`:`${C.green}12`,
+                    border:`1px solid ${cuello?C.red:C.green}40`}}>
+                    <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:4}}>
+                      {[
+                        {l:"Demanda potencial/mes",   v:demanda,    u:"u"},
+                        {l:"Capacidad máx/mes",       v:capacidad,  u:"u"},
+                        {l:"Utilización F.V.",        v:utilizacion.toFixed(0), u:"%"},
+                      ].map(x=>(
+                        <div key={x.l}>
+                          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>{x.l}</div>
+                          <div style={{fontSize:"var(--fs-sm)",fontWeight:700,fontFamily:"var(--mono)",
+                            color:x.u==="%"?(utilizacion>=90?C.red:utilizacion>=70?C.gold:C.green):C.deep}}>
+                            {x.v}{x.u}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontSize:"var(--fs-xs)",color:cuello?C.red:C.green,fontWeight:600}}>
+                      {cuello
+                        ? `⚠ Cuello de botella: se pierden ~${demanda-capacidad} prospectos/mes por falta de capacidad`
+                        : `✓ Capacidad suficiente — ${(capacidad-demanda)} unidades de holgura/mes`}
+                    </div>
+                  </div>
+                );
+              })()}
               {gk==="precio"&&(
                 <>
                   <MixTable mix={mix} setMix={setMix}/>
@@ -778,14 +827,15 @@ export default function VNMonteCarlo(){
           </div>
 
           {/* Operational KPIs */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,marginBottom:6}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:6}}>
             {[
-              {l:"UNIDADES/AÑO",    v:Math.round(stats.uVN.p50).toLocaleString(),                          c:C.green},
-              {l:"PRECIO POND. P50", v:"$"+fmt(stats.precioListaSim?.p50||precioListaMedio(mix)),           c:C.deep},
-              {l:"MARGEN REAL %",   v:(stats.margenRealPct?.p50||0).toFixed(1)+"%",                        c:stats.margenRealPct?.p50>=0?C.green:C.red},
-              {l:"VENDEDORES",      v:stats.vendProm.p50.toFixed(1),                                       c:C.blue},
-              {l:"INV. PROM/MES",   v:Math.round(stats.invPromedio.p50).toLocaleString()+"u",              c:C.gold},
-              {l:"COSTO ADQ/U",     v:"$"+fmt(stats.costoAdq.p50),                                        c:C.orange},
+              {l:"UNIDADES/AÑO",      v:Math.round(stats.uVN.p50).toLocaleString(),                        c:C.green},
+              {l:"PRECIO POND. P50",  v:"$"+fmt(stats.precioListaSim?.p50||precioListaMedio(mix)),         c:C.deep},
+              {l:"MARGEN REAL %",     v:(stats.margenRealPct?.p50||0).toFixed(1)+"%",                      c:stats.margenRealPct?.p50>=0?C.green:C.red},
+              {l:"UTILIZACIÓN F.V.",  v:((stats.utilizacion?.p50||0)*100).toFixed(1)+"%",                  c:(stats.utilizacion?.p50||0)>=0.9?C.red:(stats.utilizacion?.p50||0)>=0.7?C.gold:C.green},
+              {l:"PROSP. PERDIDOS/M", v:Math.round(stats.prospectosPerdidos?.p50||0).toLocaleString(),     c:(stats.prospectosPerdidos?.p50||0)>0?C.red:C.green},
+              {l:"INV. PROM/MES",     v:Math.round(stats.invPromedio.p50).toLocaleString()+"u",            c:C.gold},
+              {l:"COSTO ADQ/U",       v:"$"+fmt(stats.costoAdq.p50),                                      c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:4,padding:"5px 6px",border:`1px solid ${C.border}`,borderTop:`2px solid ${x.c}`}}>
                 <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1,color:C.muted}}>{x.l}</div>
