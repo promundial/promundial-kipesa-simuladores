@@ -112,9 +112,12 @@ function simOnce(P){
     tGMktg+=S(P.gasto_marketing);
     tGLeads+=leads*S(P.costo_por_lead);
 
-    // Floor plan
+    // Floor plan — financia el costo de adquisición al proveedor,
+    // que es precio de lista × (1 - margen). El descuento comercial
+    // no reduce lo que el dealer le debe al banco/importadora.
+    const costoAdqUnit=precioLista*(1-mb);
     const stock=Math.round(S(P.unidades_stock));
-    tFP+=(stock*precio)*S(P.tasa_floorplan)/100/12;
+    tFP+=(stock*costoAdqUnit)*S(P.tasa_floorplan)/100/12;
 
     // Admin & gastos fijos
     const admN=Math.round(S(P.personal_admin_vn));
