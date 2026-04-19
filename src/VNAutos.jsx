@@ -510,8 +510,21 @@ export default function VNMonteCarlo(){
   const[gsRunning,setGsRunning]=useState(false);
   const origRef=useRef(null);
 
-  const chg=useCallback((k,f,v)=>{setParams(p=>({...p,[k]:{...p[k],[f]:v}}));},[]);
+  const chg=useCallback((k,f,v)=>{
+    setParams(p=>{
+      const updated={...p,[k]:{...p[k],[f]:v}};
+      paramsRef.current=updated; // sync update so handleRun always has latest
+      return updated;
+    });
+  },[]);
 
+  const syncSetMix = useCallback((updater) => {
+    setMix(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      mixRef.current = next;
+      return next;
+    });
+  }, []);
   const paramsRef = useRef(params);
   const mixRef    = useRef(mix);
   useEffect(()=>{ paramsRef.current = params; }, [params]);
@@ -530,7 +543,8 @@ export default function VNMonteCarlo(){
       const _leads=safeParams.leads_mes.mean, _conv=safeParams.tasa_conversion.mean/100;
       const _dev=safeParams.devoluciones.mean/100, _fte=safeParams.vendedores_fte.mean, _prod=safeParams.productividad.mean;
       console.log('DEBUG demanda/mes:',Math.round(_leads*_conv*(1-_dev)),'| capacidad/mes:',Math.floor(_fte*_prod));
-      const res=runSim(safeParams,numSims,currentMix);setResults(res);
+      const res=runSim(safeParams,numSims,currentMix);
+      setResults([...res]); // spread forces new array reference → useMemo recalculates stats
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(res.map(r=>r[m]));});
       const se={};Object.keys(safeParams).filter(k=>k!=="tasa_imp").forEach(k=>{
@@ -556,7 +570,7 @@ export default function VNMonteCarlo(){
       const r=goalSeek({params:safeParams,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix:currentMix,mixLevers:mixLeverIdxs});
       setGsResult(r);
       // Apply optimized mix if mix levers were active
-      if(mixLeverIdxs.length>0 && r.mix) setMix(r.mix);
+      if(mixLeverIdxs.length>0 && r.mix) syncSetMix(r.mix);
       const optP=r.params;
       const fr=runSim(optP,numSims,r.mix||currentMix);setResults(fr);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
@@ -721,7 +735,7 @@ export default function VNMonteCarlo(){
               })()}
               {gk==="precio"&&(
                 <>
-                  <MixTable mix={mix} setMix={setMix}/>
+                  <MixTable mix={mix} setMix={syncSetMix}/>
                   {(()=>{
                     const mb=params.margen_bruto_pct?.mean||0;
                     const desc=params.descuento_pct?.mean||0;
