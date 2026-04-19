@@ -146,7 +146,6 @@ function simOnce(P, mix){
 
     // Unidades vendidas = mínimo entre demanda y capacidad
     const uVN          = Math.min(demandaMes, capacidadMax);
-    if(m===0) console.log('simOnce m=0: leads=',leads,'conv=',conv.toFixed(3),'caida=',caida.toFixed(3),'demanda=',demandaMes,'vendFTE=',vendFTE,'prod=',prod.toFixed(1),'cap=',capacidadMax,'uVN=',uVN);
 
     // KPIs de utilización
     const utilizacion  = capacidadMax > 0 ? uVN / capacidadMax : 0;   // % capacidad usada
@@ -538,14 +537,8 @@ export default function VNMonteCarlo(){
     setTimeout(()=>{
       const safeParams={};
       Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(currentParams[k]||{})};});
-      console.log('DEBUG vendedores_fte:', safeParams.vendedores_fte);
-      console.log('DEBUG leads_mes:', safeParams.leads_mes);
-      console.log('DEBUG tasa_conversion:', safeParams.tasa_conversion);
-      const _leads=safeParams.leads_mes.mean, _conv=safeParams.tasa_conversion.mean/100;
-      const _dev=safeParams.devoluciones.mean/100, _fte=safeParams.vendedores_fte.mean, _prod=safeParams.productividad.mean;
-      console.log('DEBUG demanda/mes:',Math.round(_leads*_conv*(1-_dev)),'| capacidad/mes:',Math.floor(_fte*_prod));
       const res=runSim(safeParams,numSims,currentMix);
-      setResults([...res]); // spread forces new array reference → useMemo recalculates stats
+      setResults([...res]);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(res.map(r=>r[m]));});
       const se={};Object.keys(safeParams).filter(k=>k!=="tasa_imp").forEach(k=>{
