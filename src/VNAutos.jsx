@@ -137,15 +137,18 @@ function simOnce(P, mix){
     const caida=S(P.devoluciones)/100;
     const uVN=Math.round(aprobados*(1-caida));
     const precioLista=samplePrecioLista(mix);
+    const mbBase=S(P.margen_bruto_pct)/100;      // margen negociado con el importador
+    const costoAdqUnit=precioLista*(1-mbBase);    // costo fijo al importador — no cambia con el descuento
     const descuento=S(P.descuento_pct)/100;
-    const precio=precioLista*(1-descuento);
-    const mb=S(P.margen_bruto_pct)/100;
-    const costoAdqUnit=precioLista*(1-mb); // costo al importador, base del floorplan
+    const precio=precioLista*(1-descuento);       // precio neto al cliente
+    // margenReal = precio - costoAdq = precioLista×(mbBase - descuento%)
+    // Si descuento > mbBase, margenReal es negativo — el dealer vende bajo costo
 
     tIngVN+=uVN*precio;
     tIngLista+=uVN*precioLista;
     tDescuento+=uVN*precioLista*descuento;
-    tCOGS+=uVN*precio*(1-mb); tUVN+=uVN;
+    tCOGS+=uVN*costoAdqUnit;  // COGS siempre sobre costo de adquisición, independiente del descuento
+    tUVN+=uVN;
     tPrecioListaSum+=precioLista; tMeses++;
 
     // Headcount from productivity
@@ -202,6 +205,8 @@ function simOnce(P, mix){
   // Derived KPIs
   const costoAdq=tUVN>0?((tGMktg+tGLeads)/tUVN):0;
   const margenPorU=tUVN>0?(margenBruto/tUVN):0;
+  // margenRealPct = margenBase% - descuento% (medias, para display)
+  const margenRealPct=(P.margen_bruto_pct.mean - P.descuento_pct.mean);
   const rotInv=tUVN>0?(tUVN/(S(P.unidades_transito)+S(P.unidades_bodega)||1)):0;
   const invPromedio=tInvTotal/12;
 
@@ -212,7 +217,7 @@ function simOnce(P, mix){
     gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
     ebitda,ebit,utilidadNeta:un,eva,
     downpaymentsCartera,capitalNeto,
-    uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,rotInv,invPromedio,
+    uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,margenRealPct,rotInv,invPromedio,
   };
 }
 function runSim(P,n,mix){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P,mix));return r;}
@@ -535,7 +540,7 @@ export default function VNMonteCarlo(){
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
       downpaymentsCartera:ex("downpaymentsCartera"),capitalNeto:ex("capitalNeto"),
-      uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),invPromedio:ex("invPromedio"),
+      uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),margenRealPct:ex("margenRealPct"),invPromedio:ex("invPromedio"),
     };
   },[results]);
 
@@ -639,7 +644,28 @@ export default function VNMonteCarlo(){
             return(<Section key={gk} title={gc.t} icon={gc.i} color={gc.c} defaultOpen={["funnel","precio","prod"].includes(gk)}>
               {keys.map(k=><PI key={k} k={k} p={PD[k]} val={params[k]} onChange={chg} hl={gsLevers[k]}/>)}
               {gk==="precio"&&(
-                <MixTable mix={mix} setMix={setMix}/>
+                <>
+                  <MixTable mix={mix} setMix={setMix}/>
+                  {(()=>{
+                    const mb=params.margen_bruto_pct?.mean||0;
+                    const desc=params.descuento_pct?.mean||0;
+                    const real=mb-desc;
+                    return(
+                      <div style={{marginTop:6,padding:"5px 8px",borderRadius:4,
+                        background:real<0?"#B3404020":real<3?"#D4772C20":"#1A5C3820",
+                        border:`1px solid ${real<0?C.red:real<3?C.orange:C.green}50`,
+                        display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)"}}>
+                          Margen real = {mb.toFixed(1)}% − {desc.toFixed(1)}% desc. =
+                        </span>
+                        <span style={{fontSize:"var(--fs-sm)",fontWeight:700,fontFamily:"var(--mono)",
+                          color:real<0?C.red:real<3?C.orange:C.green}}>
+                          {real.toFixed(1)}% {real<0?"⚠ bajo costo":real<3?"⚠ margen ajustado":"✓"}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </Section>);
           })}
@@ -751,13 +777,14 @@ export default function VNMonteCarlo(){
           </div>
 
           {/* Operational KPIs */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,marginBottom:6}}>
             {[
-              {l:"UNIDADES/AÑO",   v:Math.round(stats.uVN.p50).toLocaleString(),       c:C.green},
-              {l:"PRECIO POND. P50",v:"$"+fmt(stats.precioListaSim?.p50||precioListaMedio(mix)), c:C.deep},
-              {l:"VENDEDORES",     v:stats.vendProm.p50.toFixed(1),                    c:C.blue},
-              {l:"INV. PROM/MES",  v:Math.round(stats.invPromedio.p50).toLocaleString()+"u", c:C.gold},
-              {l:"COSTO ADQ/U",    v:"$"+fmt(stats.costoAdq.p50),                     c:C.orange},
+              {l:"UNIDADES/AÑO",    v:Math.round(stats.uVN.p50).toLocaleString(),                          c:C.green},
+              {l:"PRECIO POND. P50", v:"$"+fmt(stats.precioListaSim?.p50||precioListaMedio(mix)),           c:C.deep},
+              {l:"MARGEN REAL %",   v:(stats.margenRealPct?.p50||0).toFixed(1)+"%",                        c:stats.margenRealPct?.p50>=0?C.green:C.red},
+              {l:"VENDEDORES",      v:stats.vendProm.p50.toFixed(1),                                       c:C.blue},
+              {l:"INV. PROM/MES",   v:Math.round(stats.invPromedio.p50).toLocaleString()+"u",              c:C.gold},
+              {l:"COSTO ADQ/U",     v:"$"+fmt(stats.costoAdq.p50),                                        c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:4,padding:"5px 6px",border:`1px solid ${C.border}`,borderTop:`2px solid ${x.c}`}}>
                 <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1,color:C.muted}}>{x.l}</div>
