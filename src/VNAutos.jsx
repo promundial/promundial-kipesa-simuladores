@@ -25,7 +25,7 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRECIO Y MARGEN                                         ║
   // ╚═══════════════════════════════════════════════════════════╝
-  precio_lista:         {mean:28000,std:3000,min:18000,max:50000,label:"Precio de lista (antes descuento)",unit:"$",group:"precio",lever:false},
+  // precio_lista es calculado automáticamente desde el mix de categorías
   descuento_pct:        {mean:3,std:0.5,min:0,max:15,label:"% Descuento sobre precio de lista",unit:"%",group:"precio",lever:true},
   margen_bruto_pct:     {mean:8,std:1.5,min:3,max:15,label:"Margen bruto %",unit:"%",group:"precio",lever:true},
 
@@ -75,6 +75,21 @@ const PD = {
   wacc:                 {mean:14,std:1.5,min:8,max:18,label:"WACC %",unit:"%",group:"eva_p",lever:false},
 };
 
+// ── Mix de categorías de vehículos ──────────────────────────────────────
+// mix_pct: % promedio de ventas en esa categoría (deben sumar ~100)
+// mix_std: desviación estándar del % (variabilidad mes a mes)
+// precio_mean / precio_std: precio de lista promedio y σ dentro de la categoría
+const MIX_DEFAULT = [
+  {cat:"Sedan",      mix_pct:20, mix_std:3, precio_mean:22000, precio_std:2000},
+  {cat:"SUV",        mix_pct:25, mix_std:4, precio_mean:34000, precio_std:3500},
+  {cat:"Crossover",  mix_pct:20, mix_std:3, precio_mean:28000, precio_std:2500},
+  {cat:"Camioneta",  mix_pct:15, mix_std:3, precio_mean:40000, precio_std:4000},
+  {cat:"Hatchback",  mix_pct: 8, mix_std:2, precio_mean:16000, precio_std:1500},
+  {cat:"Minivan",    mix_pct: 5, mix_std:2, precio_mean:26000, precio_std:2000},
+  {cat:"Camiones",   mix_pct: 4, mix_std:2, precio_mean:55000, precio_std:6000},
+  {cat:"Otros",      mix_pct: 3, mix_std:1, precio_mean:25000, precio_std:3000},
+];
+
 function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
 function S(p){return Math.max(p.min,Math.min(p.max,p.mean+randn()*p.std));}
 function pctle(a,p){const s=[...a].sort((x,y)=>x-y);return s[Math.max(0,Math.ceil(s.length*p/100)-1)];}
@@ -82,9 +97,35 @@ function avg(a){return a.reduce((x,y)=>x+y,0)/a.length;}
 const fmt=v=>{if(Math.abs(v)>=1e6)return(v/1e6).toFixed(2)+"M";if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+"K";return v.toFixed(0);};
 const fmtF=v=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(v);
 
+// Muestrea precio de lista ponderado desde el mix de categorías.
+// 1) Muestrea % de cada categoría con Normal(mix_pct, mix_std), clamp ≥ 0
+// 2) Normaliza para que sumen 100%
+// 3) Muestrea precio de cada categoría con Normal(precio_mean, precio_std)
+// 4) Retorna precio ponderado
+function samplePrecioLista(mix){
+  const raw=mix.map(c=>Math.max(0, c.mix_pct+randn()*c.mix_std));
+  const total=raw.reduce((s,v)=>s+v,0)||1;
+  const weights=raw.map(v=>v/total);
+  return mix.reduce((s,c,i)=>s+weights[i]*Math.max(0,c.precio_mean+randn()*c.precio_std),0);
+}
+// Precio ponderado determinístico (medias) — para display en tiempo real
+function precioListaMedio(mix){
+  const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
+  return mix.reduce((s,c)=>s+(c.mix_pct/total)*c.precio_mean,0);
+}
+// Desviación estándar implícita ponderada del precio — para display
+function precioListaStd(mix){
+  const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
+  const mu=precioListaMedio(mix);
+  return Math.sqrt(mix.reduce((s,c)=>{
+    const w=c.mix_pct/total;
+    return s+w*(c.precio_std**2+(c.precio_mean-mu)**2);
+  },0));
+}
+
 // ═══ SIMULATION ═══
-function simOnce(P){
-  let tIngVN=0,tCOGS=0,tUVN=0,tVend=0,tIngLista=0,tDescuento=0;
+function simOnce(P, mix){
+  let tIngVN=0,tCOGS=0,tUVN=0,tVend=0,tIngLista=0,tDescuento=0,tPrecioListaSum=0,tMeses=0;
   let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0,tInvTotal=0;
 
   for(let m=0;m<12;m++){
@@ -94,7 +135,7 @@ function simOnce(P){
     const aprobados=Math.round(leads*conv);
     const caida=S(P.devoluciones)/100;
     const uVN=Math.round(aprobados*(1-caida));
-    const precioLista=S(P.precio_lista);
+    const precioLista=samplePrecioLista(mix);
     const descuento=S(P.descuento_pct)/100;
     const precio=precioLista*(1-descuento);
     const mb=S(P.margen_bruto_pct)/100;
@@ -104,6 +145,7 @@ function simOnce(P){
     tIngLista+=uVN*precioLista;
     tDescuento+=uVN*precioLista*descuento;
     tCOGS+=uVN*precio*(1-mb); tUVN+=uVN;
+    tPrecioListaSum+=precioLista; tMeses++;
 
     // Headcount from productivity
     const prod=S(P.productividad);
@@ -153,19 +195,20 @@ function simOnce(P){
 
   return{
     ingTotal,ingVN:tIngLista,descTotal:tDescuento,ingNeto:tIngVN,
+    precioListaSim: tMeses>0 ? tPrecioListaSum/tMeses : 0,
     margenBruto,cogs:tCOGS,
     gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
     ebitda,ebit,utilidadNeta:un,eva,
     uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,rotInv,invPromedio,
   };
 }
-function runSim(P,n){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P));return r;}
+function runSim(P,n,mix){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P,mix));return r;}
 
-function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600}){
+function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600,mix}){
   let cur={};Object.entries(params).forEach(([k,v])=>{cur[k]={...v};});
   const log=[],checkP=100-conf;
   for(let it=0;it<maxIter;it++){
-    const res=runSim(cur,simN);
+    const res=runSim(cur,simN,mix);
     const vals=res.map(r=>r[metric]).sort((a,b)=>a-b);
     const cv=pctle(vals,checkP),gap=target-cv;
     log.push({it,val:cv,gap});
@@ -174,8 +217,8 @@ function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600}){
     levers.forEach(k=>{
       const up={...cur,[k]:{...cur[k],mean:cur[k].mean*1.05}};
       const dn={...cur,[k]:{...cur[k],mean:cur[k].mean*0.95}};
-      const ru=runSim(up,Math.min(400,simN));
-      const rd=runSim(dn,Math.min(400,simN));
+      const ru=runSim(up,Math.min(400,simN),mix);
+      const rd=runSim(dn,Math.min(400,simN),mix);
       const vu=pctle(ru.map(r=>r[metric]).sort((a,b)=>a-b),checkP);
       const vd=pctle(rd.map(r=>r[metric]).sort((a,b)=>a-b),checkP);
       sens[k]=(vu-vd)/0.10;totS+=Math.abs(sens[k]);
@@ -188,7 +231,7 @@ function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600}){
       cur[k]={...cur[k],mean:Math.max(cur[k].min,Math.min(cur[k].max,nm))};
     });
   }
-  const fR=runSim(cur,simN);
+  const fR=runSim(cur,simN,mix);
   return{ok:false,params:cur,log,final:pctle(fR.map(r=>r[metric]).sort((a,b)=>a-b),checkP),iters:maxIter};
 }
 
@@ -254,9 +297,132 @@ function PI({k,p,val,onChange,hl}){
   );
 }
 
+// ── Mix de Categorías — tabla editable ────────────────────────────────────
+function MixTable({mix, setMix}){
+  const totalPct = mix.reduce((s,c)=>s+c.mix_pct,0);
+  const precioMed = precioListaMedio(mix);
+  const precioSd  = precioListaStd(mix);
+  const ok = Math.abs(totalPct-100)<1;
+
+  const upd=(i,field,val)=>setMix(prev=>{
+    const n=[...prev]; n[i]={...n[i],[field]:isNaN(val)?0:val}; return n;
+  });
+
+  const cols=[
+    {label:"Categoría",      w:"22%"},
+    {label:"% Mix μ",        w:"10%"},
+    {label:"% Mix σ",        w:"10%"},
+    {label:"Precio μ ($)",   w:"18%"},
+    {label:"Precio σ ($)",   w:"18%"},
+    {label:"Precio neto μ",  w:"22%"},
+  ];
+
+  return(
+    <div style={{marginTop:8}}>
+      {/* Resumen calculado */}
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:8,padding:"8px 10px",
+        background:`${C.green}12`,borderRadius:6,border:`1px solid ${C.green}30`}}>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Precio lista ponderado μ</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,color:C.green,fontFamily:"var(--mono)"}}>
+            ${fmtF(Math.round(precioMed))}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Desviación implícita σ</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,color:C.blue,fontFamily:"var(--mono)"}}>
+            ±${fmtF(Math.round(precioSd))}
+          </div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center"}}>
+          <span style={{fontSize:"var(--fs-sm)",fontWeight:700,padding:"3px 10px",borderRadius:4,
+            background:ok?"#1A5C3820":"#B3404020",
+            color:ok?C.green:C.red,border:`1px solid ${ok?C.green:C.red}50`}}>
+            Σ mix = {totalPct.toFixed(1)}% {ok?"✓":"⚠ debe ser 100%"}
+          </span>
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--fs-xs)"}}>
+          <thead>
+            <tr style={{background:C.deep,color:"#fff"}}>
+              {cols.map(c=>(
+                <th key={c.label} style={{padding:"6px 8px",textAlign:"left",
+                  fontFamily:"var(--mono)",fontWeight:600,width:c.w,whiteSpace:"nowrap"}}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {mix.map((c,i)=>{
+              const w=c.mix_pct/(totalPct||1);
+              const precioNeto=c.precio_mean*(1-0); // sin descuento aquí, es precio de lista
+              return(
+                <tr key={i} style={{background:i%2===0?C.light:C.card,
+                  borderBottom:`1px solid ${C.border}`}}>
+                  {/* Nombre categoría */}
+                  <td style={{padding:"4px 8px"}}>
+                    <input value={c.cat} onChange={e=>upd(i,"cat",e.target.value)}
+                      style={{width:"100%",border:"none",background:"transparent",
+                        fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.text}}/>
+                  </td>
+                  {/* % Mix μ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.mix_pct}
+                      onChange={e=>upd(i,"mix_pct",parseFloat(e.target.value))}
+                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
+                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
+                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                  </td>
+                  {/* % Mix σ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.mix_std}
+                      onChange={e=>upd(i,"mix_std",parseFloat(e.target.value))}
+                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
+                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
+                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                  </td>
+                  {/* Precio μ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.precio_mean}
+                      onChange={e=>upd(i,"precio_mean",parseFloat(e.target.value))}
+                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
+                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
+                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                  </td>
+                  {/* Precio σ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.precio_std}
+                      onChange={e=>upd(i,"precio_std",parseFloat(e.target.value))}
+                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
+                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
+                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                  </td>
+                  {/* Precio neto ponderado (display) */}
+                  <td style={{padding:"4px 8px",fontFamily:"var(--mono)",
+                    color:C.muted,textAlign:"right"}}>
+                    <span style={{color:C.deep,fontWeight:600}}>${fmtF(Math.round(c.precio_mean))}</span>
+                    <span style={{color:C.muted,fontSize:"var(--fs-xs)",marginLeft:4}}>
+                      ({(w*100).toFixed(1)}%)
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ═══ MAIN ═══
 export default function VNMonteCarlo(){
   const[params,setParams]=useState(()=>{const p={};Object.entries(PD).forEach(([k,v])=>{p[k]={...v};});return p;});
+  const[mix,setMix]=useState(MIX_DEFAULT.map(c=>({...c})));
   const[numSims,setNumSims]=useState(3000);
   const[results,setResults]=useState(null);
   const[running,setRunning]=useState(false);
@@ -276,39 +442,39 @@ export default function VNMonteCarlo(){
   const handleRun=useCallback(()=>{
     setRunning(true);
     setTimeout(()=>{
-      const res=runSim(params,numSims);setResults(res);
+      const res=runSim(params,numSims,mix);setResults(res);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(res.map(r=>r[m]));});
       const se={};Object.keys(params).filter(k=>k!=="tasa_imp").forEach(k=>{
         const tw={...params,[k]:{...params[k],mean:params[k].mean*1.10}};
-        const tr=runSim(tw,Math.min(500,numSims));
+        const tr=runSim(tw,Math.min(500,numSims),mix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(r=>r[m]))-bv[m];});
       });
       setSensData(se);setRunning(false);setTab("results");
     },50);
-  },[params,numSims]);
+  },[params,numSims,mix]);
 
   const handleGS=useCallback(()=>{
     setGsRunning(true);
     origRef.current={};Object.entries(params).forEach(([k,v])=>{origRef.current[k]={...v};});
     setTimeout(()=>{
       const lk=Object.keys(gsLevers).filter(k=>gsLevers[k]);
-      const r=goalSeek({params,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk});
+      const r=goalSeek({params,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix});
       setGsResult(r);
       const optP=r.params;
-      const fr=runSim(optP,numSims);setResults(fr);
+      const fr=runSim(optP,numSims,mix);setResults(fr);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(fr.map(x=>x[m]));});
       const se={};Object.keys(optP).filter(k=>k!=="tasa_imp").forEach(k=>{
         const tw={...optP,[k]:{...optP[k],mean:optP[k].mean*1.10}};
-        const tr=runSim(tw,Math.min(500,numSims));
+        const tr=runSim(tw,Math.min(500,numSims),mix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(x=>x[m]))-bv[m];});
       });
       setSensData(se);
       setParams(prev=>{const n={...prev};Object.entries(optP).forEach(([k,v])=>{n[k]={...v};});return n;});
       setGsRunning(false);setTab("goalseeking");
     },80);
-  },[params,gsMetric,gsTarget,gsConf,gsLevers,numSims]);
+  },[params,gsMetric,gsTarget,gsConf,gsLevers,numSims,mix]);
 
   const stats=useMemo(()=>{
     if(!results)return null;
@@ -316,6 +482,7 @@ export default function VNMonteCarlo(){
     return{
       ebitda:ex("ebitda"),ebit:ex("ebit"),utilidadNeta:ex("utilidadNeta"),eva:ex("eva"),
       ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),descTotal:ex("descTotal"),ingNeto:ex("ingNeto"),
+      precioListaSim:ex("precioListaSim"),
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
       uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),invPromedio:ex("invPromedio"),
@@ -412,15 +579,7 @@ export default function VNMonteCarlo(){
             return(<Section key={gk} title={gc.t} icon={gc.i} color={gc.c} defaultOpen={["funnel","precio","prod"].includes(gk)}>
               {keys.map(k=><PI key={k} k={k} p={PD[k]} val={params[k]} onChange={chg} hl={gsLevers[k]}/>)}
               {gk==="precio"&&(
-                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,padding:"5px 7px",background:`${C.green}12`,borderRadius:4,border:`1px solid ${C.green}30`}}>
-                  <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)",flexShrink:0}}>Precio neto efectivo (μ):</span>
-                  <span style={{fontSize:"var(--fs-sm)",fontWeight:700,color:C.green,fontFamily:"var(--mono)"}}>
-                    ${fmtF(Math.round(params.precio_lista?.mean*(1-(params.descuento_pct?.mean||0)/100)))}
-                  </span>
-                  <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)"}}>
-                    = ${fmtF(params.precio_lista?.mean)} × (1 − {(params.descuento_pct?.mean||0).toFixed(1)}%)
-                  </span>
-                </div>
+                <MixTable mix={mix} setMix={setMix}/>
               )}
             </Section>);
           })}
@@ -512,12 +671,13 @@ export default function VNMonteCarlo(){
           </div>
 
           {/* Operational KPIs */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
             {[
-              {l:"UNIDADES/AÑO",v:Math.round(stats.uVN.p50).toLocaleString(),c:C.green},
-              {l:"VENDEDORES",v:stats.vendProm.p50.toFixed(1),c:C.blue},
-              {l:"INV. PROM/MES",v:Math.round(stats.invPromedio.p50).toLocaleString()+"u",c:C.gold},
-              {l:"COSTO ADQ/U",v:"$"+fmt(stats.costoAdq.p50),c:C.orange},
+              {l:"UNIDADES/AÑO",   v:Math.round(stats.uVN.p50).toLocaleString(),       c:C.green},
+              {l:"PRECIO POND. P50",v:"$"+fmt(stats.precioListaSim?.p50||precioListaMedio(mix)), c:C.deep},
+              {l:"VENDEDORES",     v:stats.vendProm.p50.toFixed(1),                    c:C.blue},
+              {l:"INV. PROM/MES",  v:Math.round(stats.invPromedio.p50).toLocaleString()+"u", c:C.gold},
+              {l:"COSTO ADQ/U",    v:"$"+fmt(stats.costoAdq.p50),                     c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:4,padding:"5px 6px",border:`1px solid ${C.border}`,borderTop:`2px solid ${x.c}`}}>
                 <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1,color:C.muted}}>{x.l}</div>
