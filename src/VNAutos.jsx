@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 
 // ═══════════════════════════════════════════════════════════════════════
 // SIMULADOR MONTE CARLO — VENTA DE AUTOS NUEVOS
@@ -193,7 +193,15 @@ function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600}){
 }
 
 // ─── UI ───
-function Histo({values,color,label,target,w=286,h=72}){
+function Histo({values,color,label,target,h=72}){
+  const ref=useRef(null);
+  const[w,setW]=useState(320);
+  useEffect(()=>{
+    if(!ref.current)return;
+    const ro=new ResizeObserver(e=>setW(e[0].contentRect.width||320));
+    ro.observe(ref.current);
+    return()=>ro.disconnect();
+  },[]);
   const sorted=[...values].sort((a,b)=>a-b);
   const bins=28,mn=sorted[0],mx=sorted[sorted.length-1],rng=mx-mn||1,bw=rng/bins;
   const cts=new Array(bins).fill(0);
@@ -201,16 +209,16 @@ function Histo({values,color,label,target,w=286,h=72}){
   const maxC=Math.max(...cts),barW=w/bins,toX=v=>Math.max(0,Math.min(w,((v-mn)/rng)*w));
   const p10=pctle(sorted,10),p50=pctle(sorted,50),p90=pctle(sorted,90);
   return(
-    <div style={{marginBottom:8}}>
+    <div ref={ref} style={{marginBottom:8,width:"100%"}}>
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:1}}>
-        <span style={{fontFamily:"var(--serif)",fontSize:11,fontWeight:700,color:C.deep}}>{label}</span>
-        <span style={{fontFamily:"var(--mono)",fontSize:8,color:C.muted}}>μ ${fmt(avg(values))}</span>
+        <span style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep}}>{label}</span>
+        <span style={{fontFamily:"var(--mono)",fontSize:"var(--fs-xs)",color:C.muted}}>μ ${fmt(avg(values))}</span>
       </div>
-      <svg width={w} height={h+18} style={{display:"block"}}>
+      <svg width={w} height={h+20} style={{display:"block",width:"100%"}}>
         {cts.map((c,i)=><rect key={i} x={i*barW} y={h-(c/maxC)*h} width={barW-.5} height={(c/maxC)*h} fill={color} opacity={.45} rx={1}/>)}
-        {target!==undefined&&<><line x1={toX(target)} x2={toX(target)} y1={0} y2={h} stroke={C.red} strokeWidth={2} strokeDasharray="4,3"/><text x={toX(target)} y={h+10} fill={C.red} fontSize={7} fontFamily="var(--mono)" textAnchor="middle">META</text></>}
+        {target!==undefined&&<><line x1={toX(target)} x2={toX(target)} y1={0} y2={h} stroke={C.red} strokeWidth={2} strokeDasharray="4,3"/><text x={toX(target)} y={h+10} fill={C.red} fontSize="9" fontFamily="var(--mono)" textAnchor="middle">META</text></>}
         {[[p10,"#D06838","P10"],[p50,C.deep,"P50"],[p90,C.blue,"P90"]].map(([v,cl,lb])=>(
-          <g key={lb}><line x1={toX(v)} x2={toX(v)} y1={0} y2={h} stroke={cl} strokeWidth={1.2} strokeDasharray={lb==="P50"?"0":"3,2"}/><text x={toX(v)} y={h+16} fill={cl} fontSize={7} fontFamily="var(--mono)" textAnchor="middle">{lb} ${fmt(v)}</text></g>
+          <g key={lb}><line x1={toX(v)} x2={toX(v)} y1={0} y2={h} stroke={cl} strokeWidth={1.2} strokeDasharray={lb==="P50"?"0":"3,2"}/><text x={toX(v)} y={h+18} fill={cl} fontSize="9" fontFamily="var(--mono)" textAnchor="middle">{lb} ${fmt(v)}</text></g>
         ))}
       </svg>
     </div>
@@ -220,28 +228,28 @@ function Histo({values,color,label,target,w=286,h=72}){
 function Section({title,icon,color,children,defaultOpen=false}){
   const[open,setOpen]=useState(defaultOpen);
   return(
-    <div style={{background:C.card,borderRadius:6,marginBottom:6,border:`1px solid ${C.border}`,borderTop:`3px solid ${color}`,overflow:"hidden"}}>
-      <button onClick={()=>setOpen(!open)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
-        <span style={{fontFamily:"var(--serif)",fontSize:12,fontWeight:700,color}}>{icon} {title}</span>
-        <span style={{fontSize:14,color:C.muted,transition:"transform .2s",transform:open?"rotate(180deg)":"rotate(0)"}}>{open?"▾":"▸"}</span>
+    <div style={{background:C.card,borderRadius:"var(--radius)",marginBottom:6,border:`1px solid ${C.border}`,borderTop:`3px solid ${color}`,overflow:"hidden"}}>
+      <button onClick={()=>setOpen(!open)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"var(--pad-y) var(--pad-x)",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+        <span style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color}}>{icon} {title}</span>
+        <span style={{fontSize:"var(--fs-lg)",color:C.muted,transition:"transform .2s",transform:open?"rotate(180deg)":"rotate(0)"}}>{open?"▾":"▸"}</span>
       </button>
-      {open&&<div style={{padding:"0 8px 6px"}}>{children}</div>}
+      {open&&<div style={{padding:`0 var(--pad-x) var(--pad-y)`}}>{children}</div>}
     </div>
   );
 }
 
 function PI({k,p,val,onChange,hl}){
   return(
-    <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:2,background:hl?`${C.gold}12`:"transparent",padding:"1px 3px",borderRadius:3}}>
-      <label style={{width:175,fontSize:9.5,fontFamily:"var(--mono)",color:C.text,flexShrink:0,lineHeight:1.15}}>{p.label}</label>
+    <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3,background:hl?`${C.gold}12`:"transparent",padding:"2px 4px",borderRadius:3}}>
+      <label style={{width:"var(--lbl-w)",fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.text,flexShrink:0,lineHeight:1.3}}>{p.label}</label>
       {["mean","std"].map(f=>(
         <div key={f} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-          <span style={{fontSize:6,color:C.muted,letterSpacing:1}}>{f==="mean"?"μ":"σ"}</span>
+          <span style={{fontSize:"var(--fs-xs)",color:C.muted,letterSpacing:1}}>{f==="mean"?"μ":"σ"}</span>
           <input type="number" value={val[f]} onChange={e=>onChange(k,f,parseFloat(e.target.value)||0)}
-            style={{width:56,padding:"2px 3px",fontSize:10,fontFamily:"var(--mono)",border:`1px solid ${hl?C.gold:C.border}`,borderRadius:2,background:C.light,textAlign:"right"}}/>
+            style={{width:"var(--inp-w)",padding:"3px 4px",fontSize:"var(--fs-sm)",fontFamily:"var(--mono)",border:`1px solid ${hl?C.gold:C.border}`,borderRadius:2,background:C.light,textAlign:"right"}}/>
         </div>
       ))}
-      <span style={{fontSize:7,color:C.muted,width:12}}>{p.unit}</span>
+      <span style={{fontSize:"var(--fs-xs)",color:C.muted,width:14,flexShrink:0}}>{p.unit}</span>
     </div>
   );
 }
@@ -342,14 +350,32 @@ export default function VNMonteCarlo(){
   };
 
   const tabs=[{k:"supuestos",l:"📝 Supuestos"},{k:"goalseeking",l:"🎯 Goal-Seek"},{k:"results",l:"📊 Resultados"},{k:"sensitivity",l:"🌪️ Tornado"}];
-  const inpS={padding:"4px 7px",borderRadius:3,border:`1px solid ${C.border}`,fontSize:10,fontFamily:"var(--mono)",background:C.light,textAlign:"right"};
+  const inpS={padding:"4px 7px",borderRadius:3,border:`1px solid ${C.border}`,fontSize:"var(--fs-sm)",fontFamily:"var(--mono)",background:C.light,textAlign:"right"};
 
   return(
     <div style={{"--serif":"'Cormorant Garamond',serif","--sans":"'Outfit',sans-serif","--mono":"'JetBrains Mono',monospace",
       minHeight:"100vh",background:`linear-gradient(170deg,${C.light} 0%,#EDE8E0 100%)`,fontFamily:"var(--sans)",color:C.text}}>
+      <style>{`
+        :root {
+          --fs-xs:   clamp(8px,  1.1vw, 11px);
+          --fs-sm:   clamp(10px, 1.3vw, 13px);
+          --fs-md:   clamp(12px, 1.5vw, 15px);
+          --fs-lg:   clamp(14px, 1.8vw, 18px);
+          --fs-xl:   clamp(16px, 2.2vw, 22px);
+          --fs-2xl:  clamp(20px, 2.8vw, 28px);
+          --inp-w:   clamp(56px, 7vw,  80px);
+          --lbl-w:   clamp(160px, 20vw, 220px);
+          --pad-x:   clamp(8px,  2vw,  24px);
+          --pad-y:   clamp(6px,  1.2vw, 14px);
+          --radius:  clamp(4px,  0.5vw, 8px);
+        }
+        input[type=number] { font-size: var(--fs-sm) !important; }
+        select             { font-size: var(--fs-sm) !important; }
+        button             { font-size: var(--fs-sm) !important; }
+      `}</style>
       <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 
-      <div style={{background:`linear-gradient(135deg,${C.deep} 0%,${C.green} 100%)`,padding:"14px 12px 10px",color:"#fff"}}>
+      <div style={{background:`linear-gradient(135deg,${C.deep} 0%,${C.green} 100%)`,padding:"var(--pad-y) var(--pad-x)",color:"#fff"}}>
         <svg width="150" height="22" viewBox="0 0 858 129" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginBottom:6,display:"block"}}>
           <path d="M118.195 54.8174L99.4083 36.0308L87.6003 48.4433L109.189 48.6508L101.063 60.1719L80.0357 59.9704L76.8303 59.9399L66.4815 59.8422V24.2839L77.453 16.7314V38.3448L89.8777 26.5002L71.1827 7.80524C66.1091 2.73159 57.8911 2.73159 52.8174 7.80524L34.0309 26.5918L46.4433 38.3998L46.6509 16.8108L58.1719 24.9372L57.9704 45.9644L57.9399 49.1698L57.8422 59.5186H22.2839L14.7314 48.547H36.3448L24.5002 36.1224L5.80524 54.8174C0.731587 59.891 0.731587 68.1151 5.80524 73.1826L24.5918 91.9692L36.3998 79.5567L14.8108 79.3492L22.9372 67.8281L43.9645 68.0296L47.1699 68.0601L57.5186 68.1578V103.716L46.5471 111.269V89.6552L34.1225 101.5L52.8174 120.195C57.8911 125.268 66.1091 125.268 71.1827 120.195L89.9692 101.408L77.5568 89.6002L77.3492 111.189L65.8282 103.063L66.0297 82.0356L66.0602 78.8302L66.1579 68.4814H101.716L109.269 79.453H87.6553L99.4999 91.8776L118.195 73.1826C123.269 68.109 123.269 59.891 118.195 54.8174Z" fill="white"/>
           <path d="M173.977 73.19C172.701 73.19 171.425 73.19 170.149 73.19C168.873 73.19 167.738 73.0482 166.604 72.9065V104.098H152V24.2759H175.111C178.939 24.2759 182.342 24.4177 185.178 24.843C188.014 25.2684 190.708 25.6937 192.976 26.4026C198.364 28.1039 202.618 30.7978 205.595 34.3423C208.573 38.0286 209.991 42.7073 209.991 48.3785C209.991 52.2066 209.14 55.7511 207.58 58.7284C206.021 61.8476 203.61 64.3996 200.633 66.5263C197.513 68.653 193.827 70.3544 189.432 71.4887C184.894 72.6229 179.79 73.19 173.977 73.19ZM166.604 60.5716C167.455 60.7134 168.447 60.7134 169.865 60.8551C171.141 60.8551 172.559 60.997 173.835 60.997C177.805 60.997 181.066 60.7134 183.76 60.0045C186.454 59.4374 188.581 58.4449 190.141 57.3106C191.842 56.1764 192.976 54.7586 193.685 53.1991C194.394 51.6395 194.819 49.7963 194.819 47.9532C194.819 45.5429 194.252 43.558 193.26 41.8567C192.126 40.1553 190.282 38.8793 187.588 37.8868C186.171 37.4615 184.469 37.0361 182.484 36.8943C180.499 36.6108 177.947 36.6108 174.969 36.6108H166.746V60.5716H166.604Z" fill="white"/>
@@ -363,19 +389,19 @@ export default function VNMonteCarlo(){
           <path d="M772.6 83.8238H742.541L734.743 104.24H719.146L750.907 24.418H764.235L795.995 104.24H780.54L772.6 83.8238ZM757.429 43.4165C754.593 51.7815 752.183 58.7287 749.914 64.3999L747.22 71.4889H767.921L765.227 64.3999C763.1 58.7287 760.548 51.7815 757.712 43.4165H757.429Z" fill="white"/>
           <path d="M814.569 24.2759V91.905H852.001V104.098H799.965V24.2759H814.569Z" fill="white"/>
         </svg>
-        <div style={{fontFamily:"var(--serif)",fontSize:15,fontWeight:700}}>Simulador Monte Carlo — Venta Autos Nuevos</div>
-        <div style={{fontSize:7,opacity:.7,letterSpacing:1.5,textTransform:"uppercase"}}>Funnel Comercial · Inventario · Goal-Seeking</div>
+        <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-lg)",fontWeight:700}}>Simulador Monte Carlo — Venta Autos Nuevos</div>
+        <div style={{fontSize:"var(--fs-xs)",opacity:.7,letterSpacing:1.5,textTransform:"uppercase"}}>Funnel Comercial · Inventario · Goal-Seeking</div>
       </div>
 
-      <div style={{padding:"8px 8px 36px"}}>
-        <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
-          <button onClick={handleRun} disabled={running} style={{padding:"7px 16px",borderRadius:4,border:"none",cursor:"pointer",background:running?C.muted:`linear-gradient(135deg,${C.green},${C.deep})`,color:"#fff",fontSize:10,fontWeight:600}}>{running?"⏳...":"▶ Simular"}</button>
-          <button onClick={handleGS} disabled={gsRunning} style={{padding:"7px 16px",borderRadius:4,border:"none",cursor:"pointer",background:gsRunning?C.muted:`linear-gradient(135deg,${C.gold},${C.orange})`,color:"#fff",fontSize:10,fontWeight:600}}>{gsRunning?"⏳...":"🎯 Goal-Seek"}</button>
-          <select value={numSims} onChange={e=>setNumSims(+e.target.value)} style={{...inpS,width:55,fontSize:9}}>{[1000,3000,5000].map(n=><option key={n} value={n}>{n}</option>)}</select>
+      <div style={{padding:"var(--pad-y) var(--pad-x) 36px",maxWidth:960,margin:"0 auto"}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+          <button onClick={handleRun} disabled={running} style={{padding:"8px 18px",borderRadius:4,border:"none",cursor:"pointer",background:running?C.muted:`linear-gradient(135deg,${C.green},${C.deep})`,color:"#fff",fontSize:"var(--fs-sm)",fontWeight:600}}>{running?"⏳...":"▶ Simular"}</button>
+          <button onClick={handleGS} disabled={gsRunning} style={{padding:"8px 18px",borderRadius:4,border:"none",cursor:"pointer",background:gsRunning?C.muted:`linear-gradient(135deg,${C.gold},${C.orange})`,color:"#fff",fontSize:"var(--fs-sm)",fontWeight:600}}>{gsRunning?"⏳...":"🎯 Goal-Seek"}</button>
+          <select value={numSims} onChange={e=>setNumSims(+e.target.value)} style={{...inpS,width:70}}>{[1000,3000,5000].map(n=><option key={n} value={n}>{n}</option>)}</select>
         </div>
 
         <div style={{display:"flex",gap:0,marginBottom:8}}>
-          {tabs.map((t,i)=>(<button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,padding:"6px 2px",fontSize:8.5,fontWeight:tab===t.k?600:400,background:tab===t.k?C.card:"transparent",color:tab===t.k?C.deep:C.muted,border:`1px solid ${C.border}`,borderBottom:tab===t.k?`2px solid ${C.gold}`:`1px solid ${C.border}`,borderRadius:i===0?"5px 0 0 0":i===tabs.length-1?"0 5px 0 0":0,cursor:"pointer"}}>{t.l}</button>))}
+          {tabs.map((t,i)=>(<button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,padding:"8px 2px",fontSize:"var(--fs-xs)",fontWeight:tab===t.k?600:400,background:tab===t.k?C.card:"transparent",color:tab===t.k?C.deep:C.muted,border:`1px solid ${C.border}`,borderBottom:tab===t.k?`2px solid ${C.gold}`:`1px solid ${C.border}`,borderRadius:i===0?"5px 0 0 0":i===tabs.length-1?"0 5px 0 0":0,cursor:"pointer"}}>{t.l}</button>))}
         </div>
 
         {/* ═══ SUPUESTOS ═══ */}
@@ -387,11 +413,11 @@ export default function VNMonteCarlo(){
               {keys.map(k=><PI key={k} k={k} p={PD[k]} val={params[k]} onChange={chg} hl={gsLevers[k]}/>)}
               {gk==="precio"&&(
                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,padding:"5px 7px",background:`${C.green}12`,borderRadius:4,border:`1px solid ${C.green}30`}}>
-                  <span style={{fontSize:9,color:C.muted,fontFamily:"var(--mono)",flexShrink:0}}>Precio neto efectivo (μ):</span>
-                  <span style={{fontSize:11,fontWeight:700,color:C.green,fontFamily:"var(--mono)"}}>
+                  <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)",flexShrink:0}}>Precio neto efectivo (μ):</span>
+                  <span style={{fontSize:"var(--fs-sm)",fontWeight:700,color:C.green,fontFamily:"var(--mono)"}}>
                     ${fmtF(Math.round(params.precio_lista?.mean*(1-(params.descuento_pct?.mean||0)/100)))}
                   </span>
-                  <span style={{fontSize:8,color:C.muted,fontFamily:"var(--mono)"}}>
+                  <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)"}}>
                     = ${fmtF(params.precio_lista?.mean)} × (1 − {(params.descuento_pct?.mean||0).toFixed(1)}%)
                   </span>
                 </div>
@@ -403,31 +429,31 @@ export default function VNMonteCarlo(){
         {/* ═══ GOAL-SEEKING ═══ */}
         {tab==="goalseeking"&&(<div>
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`,marginBottom:8,borderTop:`3px solid ${C.gold}`}}>
-            <div style={{fontFamily:"var(--serif)",fontSize:13,fontWeight:700,color:C.deep,marginBottom:6}}>🎯 Meta de Ventas</div>
+            <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:6}}>🎯 Meta de Ventas</div>
             <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap",alignItems:"flex-end"}}>
               <div>
-                <div style={{fontSize:7,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Métrica</div>
+                <div style={{fontSize:"var(--fs-xs)",color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Métrica</div>
                 <select value={gsMetric} onChange={e=>setGsMetric(e.target.value)} style={{...inpS,width:100}}>
                   <option value="eva">EVA</option><option value="ebitda">EBITDA</option><option value="ebit">EBIT</option><option value="utilidadNeta">Ut. Neta</option>
                 </select>
               </div>
               <div>
-                <div style={{fontSize:7,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Meta USD/año</div>
+                <div style={{fontSize:"var(--fs-xs)",color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Meta USD/año</div>
                 <input type="number" value={gsTarget} onChange={e=>setGsTarget(parseFloat(e.target.value)||0)} style={{...inpS,width:95}}/>
               </div>
               <div>
-                <div style={{fontSize:7,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Confianza</div>
+                <div style={{fontSize:"var(--fs-xs)",color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Confianza</div>
                 <select value={gsConf} onChange={e=>setGsConf(+e.target.value)} style={{...inpS,width:55}}>{[50,60,70,80,90].map(n=><option key={n} value={n}>{n}%</option>)}</select>
               </div>
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:C.deep,marginBottom:4}}>Palancas</div>
+            <div style={{fontSize:"var(--fs-sm)",fontWeight:600,color:C.deep,marginBottom:4}}>Palancas</div>
             {Object.entries(GC).filter(([gk])=>Object.keys(PD).some(k=>PD[k].group===gk&&PD[k].lever)).map(([gk,gc])=>{
               const keys=Object.entries(PD).filter(([,v])=>v.group===gk&&v.lever).map(([k])=>k);
               if(!keys.length)return null;
               return(<div key={gk} style={{marginBottom:3}}>
-                <div style={{fontSize:7,fontWeight:600,color:gc.c}}>{gc.i} {gc.t}</div>
+                <div style={{fontSize:"var(--fs-xs)",fontWeight:600,color:gc.c}}>{gc.i} {gc.t}</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:2}}>
-                  {keys.map(k=>(<button key={k} onClick={()=>setGsLevers(p=>({...p,[k]:!p[k]}))} style={{padding:"2px 5px",borderRadius:3,fontSize:7.5,fontFamily:"var(--mono)",border:`1px solid ${gsLevers[k]?C.gold:C.border}`,cursor:"pointer",background:gsLevers[k]?`${C.gold}20`:"transparent",color:gsLevers[k]?C.deep:C.muted}}>{PD[k].label}</button>))}
+                  {keys.map(k=>(<button key={k} onClick={()=>setGsLevers(p=>({...p,[k]:!p[k]}))} style={{padding:"2px 5px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",border:`1px solid ${gsLevers[k]?C.gold:C.border}`,cursor:"pointer",background:gsLevers[k]?`${C.gold}20`:"transparent",color:gsLevers[k]?C.deep:C.muted}}>{PD[k].label}</button>))}
                 </div>
               </div>);
             })}
@@ -435,12 +461,12 @@ export default function VNMonteCarlo(){
           {gsResult&&(
             <div style={{background:C.card,borderRadius:6,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
               <div style={{padding:"10px 12px",background:gsResult.ok?`linear-gradient(135deg,${C.green},${C.deep})`:`linear-gradient(135deg,${C.orange},${C.red})`,color:"#fff"}}>
-                <div style={{fontSize:12,fontWeight:700}}>{gsResult.ok?"✅ Meta Alcanzable":"⚠️ Meta Difícil"}</div>
-                <div style={{fontSize:10,fontFamily:"var(--mono)",opacity:.9,marginTop:2}}>{gsMetric.toUpperCase()} objetivo: ${fmtF(gsTarget)} → Logrado: ${fmtF(Math.round(gsResult.final))} ({gsConf}% confianza)</div>
+                <div style={{fontSize:"var(--fs-md)",fontWeight:700}}>{gsResult.ok?"✅ Meta Alcanzable":"⚠️ Meta Difícil"}</div>
+                <div style={{fontSize:"var(--fs-sm)",fontFamily:"var(--mono)",opacity:.9,marginTop:2}}>{gsMetric.toUpperCase()} objetivo: ${fmtF(gsTarget)} → Logrado: ${fmtF(Math.round(gsResult.final))} ({gsConf}% confianza)</div>
               </div>
               <div style={{padding:"10px"}}>
-                <div style={{fontFamily:"var(--serif)",fontSize:14,fontWeight:700,color:C.deep,marginBottom:6}}>Objetivos KPI</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 65px 65px 50px",gap:2,padding:"5px 6px",background:C.deep,borderRadius:"4px 4px 0 0",color:"#fff",fontFamily:"var(--mono)",fontSize:8,fontWeight:600}}>
+                <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-lg)",fontWeight:700,color:C.deep,marginBottom:6}}>Objetivos KPI</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 65px 65px 50px",gap:2,padding:"5px 6px",background:C.deep,borderRadius:"4px 4px 0 0",color:"#fff",fontFamily:"var(--mono)",fontSize:"var(--fs-xs)",fontWeight:600}}>
                   <div>KPI</div><div style={{textAlign:"center"}}>ACTUAL</div><div style={{textAlign:"center"}}>OBJETIVO</div><div style={{textAlign:"center"}}>DELTA</div>
                 </div>
                 {leverChanges.map((ch,idx)=>{
@@ -448,10 +474,10 @@ export default function VNMonteCarlo(){
                   const fmtVal=(v,u)=>{if(u==="%")return v.toFixed(1)+"%";if(u==="$")return"$"+fmtF(Math.round(v));return Math.round(v)+(u?" "+u:"");};
                   return(
                     <div key={ch.k} style={{display:"grid",gridTemplateColumns:"1fr 65px 65px 50px",gap:2,padding:"6px",alignItems:"center",background:idx%2===0?C.light:C.card,borderBottom:`1px solid ${C.border}`}}>
-                      <div style={{fontSize:9.5,fontWeight:500}}>{ch.label}</div>
-                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:10,color:C.muted}}>{fmtVal(ch.o,ch.unit)}</div>
-                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:11,fontWeight:700,color:good?C.green:C.orange,background:good?`${C.green}12`:`${C.orange}12`,borderRadius:3,padding:"2px 4px"}}>{fmtVal(ch.n,ch.unit)}</div>
-                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:9,fontWeight:600,color:good?C.green:C.orange}}>{up?"▲":"▼"} {Math.abs(ch.p).toFixed(1)}%</div>
+                      <div style={{fontSize:"var(--fs-sm)",fontWeight:500}}>{ch.label}</div>
+                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:"var(--fs-sm)",color:C.muted}}>{fmtVal(ch.o,ch.unit)}</div>
+                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:"var(--fs-sm)",fontWeight:700,color:good?C.green:C.orange,background:good?`${C.green}12`:`${C.orange}12`,borderRadius:3,padding:"2px 4px"}}>{fmtVal(ch.n,ch.unit)}</div>
+                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:"var(--fs-xs)",fontWeight:600,color:good?C.green:C.orange}}>{up?"▲":"▼"} {Math.abs(ch.p).toFixed(1)}%</div>
                     </div>);
                 })}
               </div>
@@ -462,8 +488,8 @@ export default function VNMonteCarlo(){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:6}}>
                 {[{l:"EBITDA",s:stats.ebitda,c:C.green},{l:"EVA",s:stats.eva,c:stats.eva.p50>=0?C.gold:C.red},{l:"UNID/AÑO",s:stats.uVN,c:C.blue,noD:true},{l:"COSTO ADQ/U",s:stats.costoAdq,c:C.orange}].map(x=>(
                   <div key={x.l} style={{background:C.light,borderRadius:4,padding:"5px 7px",borderLeft:`3px solid ${x.c}`}}>
-                    <div style={{fontSize:7,textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
-                    <div style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:500,color:x.c}}>{x.noD?Math.round(x.s.p50).toLocaleString():"$"+fmt(x.s.p50)}</div>
+                    <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
+                    <div style={{fontFamily:"var(--mono)",fontSize:"var(--fs-md)",fontWeight:500,color:x.c}}>{x.noD?Math.round(x.s.p50).toLocaleString():"$"+fmt(x.s.p50)}</div>
                   </div>
                 ))}
               </div>
@@ -478,9 +504,9 @@ export default function VNMonteCarlo(){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:6}}>
             {[{l:"EBITDA",s:stats.ebitda,c:C.green},{l:"EBIT",s:stats.ebit,c:C.blue},{l:"UT.NETA",s:stats.utilidadNeta,c:C.deep},{l:"EVA",s:stats.eva,c:stats.eva.p50>=0?C.gold:C.red}].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:5,padding:"7px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${x.c}`}}>
-                <div style={{fontSize:7,textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
-                <div style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:500,color:x.c}}>${fmt(x.s.p50)}</div>
-                <div style={{fontSize:7,fontFamily:"var(--mono)",color:C.muted}}>P10 ${fmt(x.s.p10)} · P90 ${fmt(x.s.p90)}</div>
+                <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
+                <div style={{fontFamily:"var(--mono)",fontSize:"var(--fs-lg)",fontWeight:500,color:x.c}}>${fmt(x.s.p50)}</div>
+                <div style={{fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.muted}}>P10 ${fmt(x.s.p10)} · P90 ${fmt(x.s.p90)}</div>
               </div>
             ))}
           </div>
@@ -494,15 +520,15 @@ export default function VNMonteCarlo(){
               {l:"COSTO ADQ/U",v:"$"+fmt(stats.costoAdq.p50),c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:4,padding:"5px 6px",border:`1px solid ${C.border}`,borderTop:`2px solid ${x.c}`}}>
-                <div style={{fontSize:6,textTransform:"uppercase",letterSpacing:1,color:C.muted}}>{x.l}</div>
-                <div style={{fontFamily:"var(--mono)",fontSize:12,fontWeight:500,color:x.c}}>{x.v}</div>
+                <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1,color:C.muted}}>{x.l}</div>
+                <div style={{fontFamily:"var(--mono)",fontSize:"var(--fs-md)",fontWeight:500,color:x.c}}>{x.v}</div>
               </div>
             ))}
           </div>
 
           {/* P&L */}
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`,marginBottom:6}}>
-            <div style={{fontFamily:"var(--serif)",fontSize:12,fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN — Mediana Anual</div>
+            <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN — Mediana Anual</div>
             {[
               {l:"INGRESOS VN (precio neto)",v:stats.ingTotal.p50,b:1,c:C.deep},
               {l:"  Precio lista × unidades",v:stats.ingVN.p50,c:C.muted},
@@ -519,7 +545,7 @@ export default function VNMonteCarlo(){
               {l:"(-) Cargo capital",v:-(params.capital_vn.mean*params.wacc.mean/100),c:C.red},
               {l:"= EVA",v:stats.eva.p50,b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
             ].map((r,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:8.5,fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none"}}>
+              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:"var(--fs-sm)",fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none"}}>
                 <span>{r.l}</span><span style={{color:r.c}}>${fmtF(Math.round(r.v))}</span>
               </div>
             ))}
@@ -532,16 +558,16 @@ export default function VNMonteCarlo(){
           </div>
         </div>)}
         {tab==="results"&&!stats&&(
-          <div style={{background:C.card,borderRadius:6,padding:"24px 12px",textAlign:"center",border:`1px solid ${C.border}`,color:C.muted,fontSize:11}}>Presiona ▶ Simular o 🎯 Goal-Seek.</div>
+          <div style={{background:C.card,borderRadius:6,padding:"24px 12px",textAlign:"center",border:`1px solid ${C.border}`,color:C.muted,fontSize:"var(--fs-sm)"}}>Presiona ▶ Simular o 🎯 Goal-Seek.</div>
         )}
 
         {/* ═══ TORNADO ═══ */}
         {tab==="sensitivity"&&(
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"var(--serif)",fontSize:12,fontWeight:700,color:C.deep,marginBottom:4}}>Tornado — Sensibilidad +10%</div>
+            <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:4}}>Tornado — Sensibilidad +10%</div>
             <div style={{display:"flex",gap:3,marginBottom:8,flexWrap:"wrap"}}>
               {["eva","ebitda","ebit","utilidadNeta"].map(t=>(
-                <button key={t} onClick={()=>setSensTarget(t)} style={{padding:"2px 7px",borderRadius:3,fontSize:8,fontFamily:"var(--mono)",border:`1px solid ${sensTarget===t?C.gold:C.border}`,background:sensTarget===t?`${C.gold}20`:"transparent",color:sensTarget===t?C.deep:C.muted,cursor:"pointer"}}>{t==="utilidadNeta"?"Ut.Neta":t.toUpperCase()}</button>
+                <button key={t} onClick={()=>setSensTarget(t)} style={{padding:"2px 7px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",border:`1px solid ${sensTarget===t?C.gold:C.border}`,background:sensTarget===t?`${C.gold}20`:"transparent",color:sensTarget===t?C.deep:C.muted,cursor:"pointer"}}>{t==="utilidadNeta"?"Ut.Neta":t.toUpperCase()}</button>
               ))}
             </div>
             {sortedSens.length>0?sortedSens.map(([k,val])=>{
@@ -549,20 +575,20 @@ export default function VNMonteCarlo(){
               const pw=Math.abs(val)/mx*100;const ps=val>=0;
               return(
                 <div key={k} style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
-                  <div style={{width:155,fontSize:8,fontFamily:"var(--mono)",color:C.text,textAlign:"right",flexShrink:0,lineHeight:1.1}}>{params[k]?.label||k}</div>
+                  <div style={{width:"clamp(120px,18vw,180px)",fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.text,textAlign:"right",flexShrink:0,lineHeight:1.1}}>{params[k]?.label||k}</div>
                   <div style={{flex:1,height:10,background:"#F0ECE6",borderRadius:2,position:"relative"}}>
                     <div style={{position:"absolute",left:ps?"50%":`${50-pw/2}%`,width:`${pw/2}%`,height:"100%",background:ps?C.green:C.red,borderRadius:2,opacity:.6}}/>
                     <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:C.muted,opacity:.25}}/>
                   </div>
-                  <div style={{width:48,fontSize:8,fontFamily:"var(--mono)",color:ps?C.green:C.red,flexShrink:0}}>{ps?"+":""}{fmt(val)}</div>
+                  <div style={{width:"clamp(40px,6vw,60px)",fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:ps?C.green:C.red,flexShrink:0}}>{ps?"+":""}{fmt(val)}</div>
                 </div>);
             }):(
-              <div style={{textAlign:"center",padding:14,fontSize:10,color:C.muted}}>Ejecuta simulación primero.</div>
+              <div style={{textAlign:"center",padding:14,fontSize:"var(--fs-sm)",color:C.muted}}>Ejecuta simulación primero.</div>
             )}
           </div>
         )}
 
-        <div style={{marginTop:12,textAlign:"center",fontSize:7,color:C.muted}}>© Promundial Consulting Group · Monte Carlo VN · Nicaragua IR 32%</div>
+        <div style={{marginTop:12,textAlign:"center",fontSize:"var(--fs-xs)",color:C.muted}}>© Promundial Consulting Group · Monte Carlo VN · Nicaragua IR 32%</div>
       </div>
     </div>
   );
