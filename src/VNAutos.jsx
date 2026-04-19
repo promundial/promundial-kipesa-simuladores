@@ -518,6 +518,9 @@ export default function VNMonteCarlo(){
       // Defensive merge: ensure all PD keys exist before simulating
       const safeParams={};
       Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(params[k]||{})};});
+      console.log('DEBUG vendedores_fte:', safeParams.vendedores_fte);
+      console.log('DEBUG leads_mes:', safeParams.leads_mes);
+      console.log('DEBUG tasa_conversion:', safeParams.tasa_conversion);
       const res=runSim(safeParams,numSims,mix);setResults(res);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(res.map(r=>r[m]));});
