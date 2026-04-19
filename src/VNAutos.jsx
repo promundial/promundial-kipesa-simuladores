@@ -46,8 +46,9 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  INVENTARIO Y FLOOR PLAN                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  dias_inventario:      {mean:60,std:12,min:20,max:120,label:"Días inventario VN",unit:"d",group:"inv",lever:true},
-  unidades_stock:       {mean:120,std:20,min:40,max:300,label:"Unidades en stock (promedio)",unit:"u",group:"inv",lever:false},
+  dias_inventario:      {mean:60,std:12,min:10,max:180,label:"Días inventario en piso",unit:"d",group:"inv",lever:true},
+  unidades_transito:    {mean:25,std:5,min:0,max:200,label:"Unidades en tránsito",unit:"u",group:"inv",lever:false},
+  unidades_bodega:      {mean:15,std:5,min:0,max:200,label:"Unidades en bodega",unit:"u",group:"inv",lever:false},
   tasa_floorplan:       {mean:9,std:1,min:5,max:15,label:"Tasa floor plan % anual",unit:"%",group:"inv",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
@@ -84,7 +85,7 @@ const fmtF=v=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(v)
 // ═══ SIMULATION ═══
 function simOnce(P){
   let tIngVN=0,tCOGS=0,tUVN=0,tVend=0,tIngLista=0,tDescuento=0;
-  let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0;
+  let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0,tInvTotal=0;
 
   for(let m=0;m<12;m++){
     // Funnel
@@ -97,6 +98,7 @@ function simOnce(P){
     const descuento=S(P.descuento_pct)/100;
     const precio=precioLista*(1-descuento);
     const mb=S(P.margen_bruto_pct)/100;
+    const costoAdqUnit=precioLista*(1-mb); // costo al importador, base del floorplan
 
     tIngVN+=uVN*precio;
     tIngLista+=uVN*precioLista;
@@ -112,12 +114,17 @@ function simOnce(P){
     tGMktg+=S(P.gasto_marketing);
     tGLeads+=leads*S(P.costo_por_lead);
 
-    // Floor plan — financia el costo de adquisición al proveedor,
-    // que es precio de lista × (1 - margen). El descuento comercial
-    // no reduce lo que el dealer le debe al banco/importadora.
-    const costoAdqUnit=precioLista*(1-mb);
-    const stock=Math.round(S(P.unidades_stock));
-    tFP+=(stock*costoAdqUnit)*S(P.tasa_floorplan)/100/12;
+    // Floor plan — inventario total financiado:
+    //   stock_piso    = dinámico (función de ventas × días inventario)
+    //   stock_transito = fijo (unidades compradas, en camino)
+    //   stock_bodega   = fijo (unidades recibidas, no en showroom)
+    // El banco cobra desde que el dealer toma titularidad (despacho importador)
+    const stockPiso     = (uVN * S(P.dias_inventario)) / 30;
+    const stockTransito = S(P.unidades_transito);
+    const stockBodega   = S(P.unidades_bodega);
+    const invTotal      = stockPiso + stockTransito + stockBodega;
+    tInvTotal += invTotal;
+    tFP += invTotal * costoAdqUnit * S(P.tasa_floorplan) / 100 / 12;
 
     // Admin & gastos fijos
     const admN=Math.round(S(P.personal_admin_vn));
@@ -141,14 +148,15 @@ function simOnce(P){
   // Derived KPIs
   const costoAdq=tUVN>0?((tGMktg+tGLeads)/tUVN):0;
   const margenPorU=tUVN>0?(margenBruto/tUVN):0;
-  const rotInv=tUVN>0?(tUVN/(S(P.unidades_stock)||1)):0;
+  const rotInv=tUVN>0?(tUVN/(S(P.unidades_transito)+S(P.unidades_bodega)||1)):0;
+  const invPromedio=tInvTotal/12;
 
   return{
     ingTotal,ingVN:tIngLista,descTotal:tDescuento,ingNeto:tIngVN,
     margenBruto,cogs:tCOGS,
     gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
     ebitda,ebit,utilidadNeta:un,eva,
-    uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,rotInv,
+    uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,rotInv,invPromedio,
   };
 }
 function runSim(P,n){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P));return r;}
@@ -302,7 +310,7 @@ export default function VNMonteCarlo(){
       ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),descTotal:ex("descTotal"),ingNeto:ex("ingNeto"),
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
-      uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),
+      uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),invPromedio:ex("invPromedio"),
     };
   },[results]);
 
@@ -482,7 +490,7 @@ export default function VNMonteCarlo(){
             {[
               {l:"UNIDADES/AÑO",v:Math.round(stats.uVN.p50).toLocaleString(),c:C.green},
               {l:"VENDEDORES",v:stats.vendProm.p50.toFixed(1),c:C.blue},
-              
+              {l:"INV. PROM/MES",v:Math.round(stats.invPromedio.p50).toLocaleString()+"u",c:C.gold},
               {l:"COSTO ADQ/U",v:"$"+fmt(stats.costoAdq.p50),c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:4,padding:"5px 6px",border:`1px solid ${C.border}`,borderTop:`2px solid ${x.c}`}}>
