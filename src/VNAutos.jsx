@@ -138,7 +138,9 @@ function simOnce(P, mix){
     const demandaMes   = Math.round(leads * conv * (1 - caida));
 
     // Capacidad instalada: FTE × productividad individual
-    const vendFTE      = Math.max(1, Math.round(S(P.vendedores_fte)));
+    // Fallback a 8 si vendedores_fte no existe en params (compatibilidad versiones anteriores)
+    const vendFTEParam = P.vendedores_fte || {mean:8, std:0, min:1, max:100};
+    const vendFTE      = Math.max(1, Math.round(S(vendFTEParam)));
     const prod         = Math.max(0.1, S(P.productividad));
     const capacidadMax = Math.floor(vendFTE * prod);
 
@@ -486,7 +488,22 @@ function MixTable({mix, setMix}){
 
 // ═══ MAIN ═══
 export default function VNMonteCarlo(){
-  const[params,setParams]=useState(()=>{const p={};Object.entries(PD).forEach(([k,v])=>{p[k]={...v};});return p;});
+  const[params,setParams]=useState(()=>{
+    const p={};
+    Object.entries(PD).forEach(([k,v])=>{p[k]={...v};});
+    return p;
+  });
+  // Ensure any newly added PD params are always present (handles hot-reload / stale state)
+  useEffect(()=>{
+    setParams(prev=>{
+      const merged={...prev};
+      let changed=false;
+      Object.entries(PD).forEach(([k,v])=>{
+        if(!merged[k]){merged[k]={...v};changed=true;}
+      });
+      return changed?merged:prev;
+    });
+  },[]);
   const[mix,setMix]=useState(MIX_DEFAULT.map(c=>({...c})));
   const[numSims,setNumSims]=useState(3000);
   const[results,setResults]=useState(null);
@@ -662,8 +679,8 @@ export default function VNMonteCarlo(){
             return(<Section key={gk} title={gc.t} icon={gc.i} color={gc.c} defaultOpen={["funnel","precio","prod"].includes(gk)}>
               {keys.map(k=><PI key={k} k={k} p={PD[k]} val={params[k]} onChange={chg} hl={gsLevers[k]}/>)}
               {gk==="prod"&&(()=>{
-                const demanda = Math.round(params.leads_mes.mean * params.tasa_conversion.mean/100 * (1 - params.devoluciones.mean/100));
-                const capacidad = Math.round(params.vendedores_fte.mean * params.productividad.mean);
+                const demanda = Math.round((params.leads_mes?.mean||400) * (params.tasa_conversion?.mean||11)/100 * (1 - (params.devoluciones?.mean||8)/100));
+                const capacidad = Math.round((params.vendedores_fte?.mean||8) * (params.productividad?.mean||8));
                 const cuello = demanda > capacidad;
                 const utilizacion = capacidad > 0 ? Math.min(100, (demanda/capacidad)*100) : 0;
                 return(
