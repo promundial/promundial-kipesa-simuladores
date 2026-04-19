@@ -17,7 +17,7 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  FUNNEL COMERCIAL                                        ║
   // ╚═══════════════════════════════════════════════════════════╝
-  leads_mes:            {mean:400,std:60,min:100,max:800,label:"Leads / mes",unit:"u",group:"funnel",lever:true,dir:1},
+  leads_mes:            {mean:400,std:60,min:100,max:50000,label:"Leads / mes",unit:"u",group:"funnel",lever:true,dir:1},
   tasa_conversion:      {mean:11,std:2,min:4,max:25,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true,dir:1},
   devoluciones:         {mean:8,std:3,min:0,max:25,label:"% de devoluciones",unit:"%",group:"funnel",lever:true,dir:-1},
 
@@ -31,17 +31,17 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRODUCTIVIDAD COMERCIAL                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  vendedores_fte:        {mean:8,std:0,min:1,max:100,label:"Vendedores FTE (dotación actual)",unit:"u",group:"prod",lever:true,dir:1},
-  productividad:         {mean:8,std:1.5,min:3,max:15,label:"Unidades / vendedor / mes (capacidad)",unit:"u",group:"prod",lever:true,dir:1},
-  sueldo_base:           {mean:800,std:100,min:400,max:1500,label:"Sueldo base vendedor / mes",unit:"$",group:"prod",lever:false},
-  comision_por_u:        {mean:200,std:50,min:50,max:500,label:"Comisión por unidad vendida",unit:"$",group:"prod",lever:false},
-  gerente_ventas:        {mean:3000,std:400,min:1500,max:6000,label:"Sueldo gerente ventas / mes",unit:"$",group:"prod",lever:false},
+  vendedores_fte:        {mean:8,std:0,min:1,max:500,label:"Vendedores FTE (dotación actual)",unit:"u",group:"prod",lever:true,dir:1},
+  productividad:         {mean:8,std:1.5,min:1,max:100,label:"Unidades / vendedor / mes (capacidad)",unit:"u",group:"prod",lever:true,dir:1},
+  sueldo_base:           {mean:800,std:100,min:0,max:10000,label:"Sueldo base vendedor / mes",unit:"$",group:"prod",lever:false},
+  comision_por_u:        {mean:200,std:50,min:0,max:5000,label:"Comisión por unidad vendida",unit:"$",group:"prod",lever:false},
+  gerente_ventas:        {mean:3000,std:400,min:0,max:30000,label:"Sueldo gerente ventas / mes",unit:"$",group:"prod",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  MARKETING                                               ║
   // ╚═══════════════════════════════════════════════════════════╝
-  gasto_marketing:      {mean:12000,std:2000,min:4000,max:30000,label:"Gasto marketing / mes",unit:"$",group:"mktg",lever:true,dir:-1},
-  costo_por_lead:       {mean:30,std:8,min:8,max:80,label:"Costo por lead",unit:"$",group:"mktg",lever:true,dir:-1},
+  gasto_marketing:      {mean:12000,std:2000,min:0,max:500000,label:"Gasto marketing / mes",unit:"$",group:"mktg",lever:true,dir:-1},
+  costo_por_lead:       {mean:30,std:8,min:0,max:1000,label:"Costo por lead",unit:"$",group:"mktg",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  INVENTARIO Y FLOOR PLAN                                 ║
@@ -54,25 +54,25 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  GASTOS FIJOS Y OVERHEAD                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  personal_admin_vn:    {mean:3,std:0.5,min:1,max:6,label:"Personal admin VN",unit:"u",group:"gastos",lever:false},
-  sueldo_admin:         {mean:1000,std:150,min:500,max:2000,label:"Sueldo admin VN / mes",unit:"$",group:"gastos",lever:false},
-  alquiler_showroom:    {mean:8000,std:1500,min:3000,max:20000,label:"Alquiler showroom / mes",unit:"$",group:"gastos",lever:true,dir:-1},
-  servicios_mes:        {mean:2500,std:500,min:1000,max:5000,label:"Servicios básicos / mes",unit:"$",group:"gastos",lever:true,dir:-1},
-  otros_gastos:         {mean:4000,std:800,min:1500,max:10000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  personal_admin_vn:    {mean:3,std:0.5,min:0,max:100,label:"Personal admin VN",unit:"u",group:"gastos",lever:false},
+  sueldo_admin:         {mean:1000,std:150,min:0,max:20000,label:"Sueldo admin VN / mes",unit:"$",group:"gastos",lever:false},
+  alquiler_showroom:    {mean:8000,std:1500,min:0,max:200000,label:"Alquiler showroom / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  servicios_mes:        {mean:2500,std:500,min:0,max:50000,label:"Servicios básicos / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  otros_gastos:         {mean:4000,std:800,min:0,max:100000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  DEPRECIACIÓN Y AMORTIZACIÓN                             ║
   // ╚═══════════════════════════════════════════════════════════╝
-  deprec_showroom:      {mean:3000,std:400,min:0,max:8000,label:"Depreciación showroom / mes",unit:"$",group:"dya",lever:false},
-  deprec_vehiculos:     {mean:2000,std:300,min:0,max:5000,label:"Depreciación demos / utilitarios",unit:"$",group:"dya",lever:false},
-  amort_software:       {mean:800,std:200,min:0,max:2000,label:"Amortización CRM/DMS / mes",unit:"$",group:"dya",lever:false},
+  deprec_showroom:      {mean:3000,std:400,min:0,max:100000,label:"Depreciación showroom / mes",unit:"$",group:"dya",lever:false},
+  deprec_vehiculos:     {mean:2000,std:300,min:0,max:50000,label:"Depreciación demos / utilitarios",unit:"$",group:"dya",lever:false},
+  amort_software:       {mean:800,std:200,min:0,max:20000,label:"Amortización CRM/DMS / mes",unit:"$",group:"dya",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  EVA                                                     ║
   // ╚═══════════════════════════════════════════════════════════╝
   tasa_imp:             {mean:32,std:0,min:32,max:32,label:"Tasa impositiva % (IR 32%)",unit:"%",group:"eva_p",lever:false},
-  capital_vn:           {mean:1800000,std:200000,min:800000,max:4000000,label:"Capital invertido VN",unit:"$",group:"eva_p",lever:false},
-  wacc:                 {mean:14,std:1.5,min:8,max:18,label:"WACC %",unit:"%",group:"eva_p",lever:false},
+  capital_vn:           {mean:1800000,std:200000,min:0,max:100000000,label:"Capital invertido VN",unit:"$",group:"eva_p",lever:false},
+  wacc:                 {mean:14,std:1.5,min:0,max:50,label:"WACC %",unit:"%",group:"eva_p",lever:false},
   downpayment_pct:      {mean:10,std:2,min:0,max:50,label:"Downpayment % del precio de lista",unit:"%",group:"eva_p",lever:true,dir:1},
   dias_entrega:         {mean:15,std:5,min:1,max:90,label:"Días promedio reserva → entrega",unit:"d",group:"eva_p",lever:false,dir:-1},
 };
