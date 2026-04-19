@@ -414,8 +414,7 @@ export default function VNMotosMonteCarlo(){
                   <div>KPI</div><div style={{textAlign:"center"}}>ACTUAL</div><div style={{textAlign:"center"}}>OBJETIVO</div><div style={{textAlign:"center"}}>DELTA</div>
                 </div>
                 {leverChanges.map((ch,idx)=>{
-                  const up=ch.p>0;const isCost=ch.k.includes("sueldo")||ch.k.includes("gasto")||ch.k.includes("costo")||ch.k.includes("alquiler")||ch.k.includes("comision")||ch.k.includes("devoluciones")||ch.k.includes("dias")||ch.k.includes("no_show")||ch.k.includes("tiempo_muerto");
-                  const good=isCost?!up:up;
+                  const up=ch.p>0;const good=up;
                   const fmtVal=(v,u)=>{if(u==="%")return v.toFixed(1)+"%";if(u==="$")return"$"+fmtF(Math.round(v));return Math.round(v)+(u?" "+u:"");};
                   return(
                     <div key={ch.k} style={{display:"grid",gridTemplateColumns:"1fr 65px 65px 50px",gap:2,padding:"6px",alignItems:"center",background:idx%2===0?C.light:C.card,borderBottom:`1px solid ${C.border}`}}>
