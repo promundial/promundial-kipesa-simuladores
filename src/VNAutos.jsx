@@ -512,54 +512,65 @@ export default function VNMonteCarlo(){
 
   const chg=useCallback((k,f,v)=>{setParams(p=>({...p,[k]:{...p[k],[f]:v}}));},[]);
 
+  const paramsRef = useRef(params);
+  const mixRef    = useRef(mix);
+  useEffect(()=>{ paramsRef.current = params; }, [params]);
+  useEffect(()=>{ mixRef.current    = mix;    }, [mix]);
+
   const handleRun=useCallback(()=>{
     setRunning(true);
+    const currentParams = paramsRef.current;
+    const currentMix    = mixRef.current;
     setTimeout(()=>{
-      // Defensive merge: ensure all PD keys exist before simulating
       const safeParams={};
-      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(params[k]||{})};});
+      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(currentParams[k]||{})};});
       console.log('DEBUG vendedores_fte:', safeParams.vendedores_fte);
       console.log('DEBUG leads_mes:', safeParams.leads_mes);
       console.log('DEBUG tasa_conversion:', safeParams.tasa_conversion);
-      const res=runSim(safeParams,numSims,mix);setResults(res);
+      const _leads=safeParams.leads_mes.mean, _conv=safeParams.tasa_conversion.mean/100;
+      const _dev=safeParams.devoluciones.mean/100, _fte=safeParams.vendedores_fte.mean, _prod=safeParams.productividad.mean;
+      console.log('DEBUG demanda/mes:',Math.round(_leads*_conv*(1-_dev)),'| capacidad/mes:',Math.floor(_fte*_prod));
+      const res=runSim(safeParams,numSims,currentMix);setResults(res);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(res.map(r=>r[m]));});
       const se={};Object.keys(safeParams).filter(k=>k!=="tasa_imp").forEach(k=>{
         const tw={...safeParams,[k]:{...safeParams[k],mean:safeParams[k].mean*1.10}};
-        const tr=runSim(tw,Math.min(500,numSims),mix);
+        const tr=runSim(tw,Math.min(500,numSims),currentMix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(r=>r[m]))-bv[m];});
       });
       setSensData(se);setRunning(false);setTab("results");
     },50);
-  },[params,numSims,mix]);
+  },[numSims]);
 
   const handleGS=useCallback(()=>{
     setGsRunning(true);
-    origRef.current={};Object.entries(params).forEach(([k,v])=>{origRef.current[k]={...v};});
-    origRef.current._mix=mix.map(c=>({...c}));
+    const currentParams = paramsRef.current;
+    const currentMix    = mixRef.current;
+    origRef.current={};Object.entries(currentParams).forEach(([k,v])=>{origRef.current[k]={...v};});
+    origRef.current._mix=currentMix.map(c=>({...c}));
     setTimeout(()=>{
       const safeParams={};
-      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(params[k]||{})};});
+      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(currentParams[k]||{})};});
       const lk=Object.keys(gsLevers).filter(k=>gsLevers[k]);
-      const mixLeverIdxs=mix.map((c,i)=>gsMixLevers[c.cat]?i:-1).filter(i=>i>=0);
-      const r=goalSeek({params:safeParams,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix,mixLevers:mixLeverIdxs});
+      const mixLeverIdxs=currentMix.map((c,i)=>gsMixLevers[c.cat]?i:-1).filter(i=>i>=0);
+      const r=goalSeek({params:safeParams,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix:currentMix,mixLevers:mixLeverIdxs});
       setGsResult(r);
       // Apply optimized mix if mix levers were active
       if(mixLeverIdxs.length>0 && r.mix) setMix(r.mix);
       const optP=r.params;
-      const fr=runSim(optP,numSims,r.mix||mix);setResults(fr);
+      const fr=runSim(optP,numSims,r.mix||currentMix);setResults(fr);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(fr.map(x=>x[m]));});
       const se={};Object.keys(optP).filter(k=>k!=="tasa_imp").forEach(k=>{
         const tw={...optP,[k]:{...optP[k],mean:optP[k].mean*1.10}};
-        const tr=runSim(tw,Math.min(500,numSims),mix);
+        const tr=runSim(tw,Math.min(500,numSims),r.mix||currentMix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(x=>x[m]))-bv[m];});
       });
       setSensData(se);
       setParams(prev=>{const n={...prev};Object.entries(optP).forEach(([k,v])=>{n[k]={...v};});return n;});
       setGsRunning(false);setTab("goalseeking");
     },80);
-  },[params,gsMetric,gsTarget,gsConf,gsLevers,gsMixLevers,numSims,mix]);
+  },[gsMetric,gsTarget,gsConf,gsLevers,gsMixLevers,numSims]);
 
   const stats=useMemo(()=>{
     if(!results)return null;
