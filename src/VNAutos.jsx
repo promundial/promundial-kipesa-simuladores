@@ -489,21 +489,11 @@ function MixTable({mix, setMix}){
 // ═══ MAIN ═══
 export default function VNMonteCarlo(){
   const[params,setParams]=useState(()=>{
+    // Always initialize from PD — guarantees all keys exist including newly added ones
     const p={};
     Object.entries(PD).forEach(([k,v])=>{p[k]={...v};});
     return p;
   });
-  // Ensure any newly added PD params are always present (handles hot-reload / stale state)
-  useEffect(()=>{
-    setParams(prev=>{
-      const merged={...prev};
-      let changed=false;
-      Object.entries(PD).forEach(([k,v])=>{
-        if(!merged[k]){merged[k]={...v};changed=true;}
-      });
-      return changed?merged:prev;
-    });
-  },[]);
   const[mix,setMix]=useState(MIX_DEFAULT.map(c=>({...c})));
   const[numSims,setNumSims]=useState(3000);
   const[results,setResults]=useState(null);
@@ -525,11 +515,14 @@ export default function VNMonteCarlo(){
   const handleRun=useCallback(()=>{
     setRunning(true);
     setTimeout(()=>{
-      const res=runSim(params,numSims,mix);setResults(res);
+      // Defensive merge: ensure all PD keys exist before simulating
+      const safeParams={};
+      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(params[k]||{})};});
+      const res=runSim(safeParams,numSims,mix);setResults(res);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(res.map(r=>r[m]));});
-      const se={};Object.keys(params).filter(k=>k!=="tasa_imp").forEach(k=>{
-        const tw={...params,[k]:{...params[k],mean:params[k].mean*1.10}};
+      const se={};Object.keys(safeParams).filter(k=>k!=="tasa_imp").forEach(k=>{
+        const tw={...safeParams,[k]:{...safeParams[k],mean:safeParams[k].mean*1.10}};
         const tr=runSim(tw,Math.min(500,numSims),mix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(r=>r[m]))-bv[m];});
       });
@@ -542,9 +535,11 @@ export default function VNMonteCarlo(){
     origRef.current={};Object.entries(params).forEach(([k,v])=>{origRef.current[k]={...v};});
     origRef.current._mix=mix.map(c=>({...c}));
     setTimeout(()=>{
+      const safeParams={};
+      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(params[k]||{})};});
       const lk=Object.keys(gsLevers).filter(k=>gsLevers[k]);
       const mixLeverIdxs=mix.map((c,i)=>gsMixLevers[c.cat]?i:-1).filter(i=>i>=0);
-      const r=goalSeek({params,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix,mixLevers:mixLeverIdxs});
+      const r=goalSeek({params:safeParams,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix,mixLevers:mixLeverIdxs});
       setGsResult(r);
       // Apply optimized mix if mix levers were active
       if(mixLeverIdxs.length>0 && r.mix) setMix(r.mix);
