@@ -19,8 +19,7 @@ const PD = {
   // ╚═══════════════════════════════════════════════════════════╝
   leads_mes:            {mean:400,std:60,min:100,max:800,label:"Leads / mes",unit:"u",group:"funnel",lever:true},
   tasa_conversion:      {mean:11,std:2,min:4,max:25,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true},
-  cierre_1er_contacto:  {mean:35,std:5,min:15,max:60,label:"% cierre en 1er contacto",unit:"%",group:"funnel",lever:true},
-  devoluciones:     {mean:8,std:3,min:0,max:25,label:"% de devoluciones",unit:"%",group:"funnel",lever:true},
+  devoluciones:         {mean:8,std:3,min:0,max:25,label:"% de devoluciones",unit:"%",group:"funnel",lever:true},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRECIO Y MARGEN                                         ║
@@ -204,35 +203,61 @@ function simOnce(P, mix){
 }
 function runSim(P,n,mix){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P,mix));return r;}
 
-function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600,mix}){
+function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600,mix,mixLevers}){
   let cur={};Object.entries(params).forEach(([k,v])=>{cur[k]={...v};});
+  let curMix=mix.map(c=>({...c}));
   const log=[],checkP=100-conf;
+
   for(let it=0;it<maxIter;it++){
-    const res=runSim(cur,simN,mix);
+    const res=runSim(cur,simN,curMix);
     const vals=res.map(r=>r[metric]).sort((a,b)=>a-b);
     const cv=pctle(vals,checkP),gap=target-cv;
     log.push({it,val:cv,gap});
-    if(Math.abs(gap)<Math.abs(target)*0.02||gap<=0)return{ok:true,params:cur,log,final:cv,iters:it+1};
+    if(Math.abs(gap)<Math.abs(target)*0.02||gap<=0)return{ok:true,params:cur,mix:curMix,log,final:cv,iters:it+1};
+
+    // Sensitivity for PD levers
     const sens={};let totS=0;
     levers.forEach(k=>{
       const up={...cur,[k]:{...cur[k],mean:cur[k].mean*1.05}};
       const dn={...cur,[k]:{...cur[k],mean:cur[k].mean*0.95}};
-      const ru=runSim(up,Math.min(400,simN),mix);
-      const rd=runSim(dn,Math.min(400,simN),mix);
-      const vu=pctle(ru.map(r=>r[metric]).sort((a,b)=>a-b),checkP);
-      const vd=pctle(rd.map(r=>r[metric]).sort((a,b)=>a-b),checkP);
-      sens[k]=(vu-vd)/0.10;totS+=Math.abs(sens[k]);
+      const vu=pctle(runSim(up,Math.min(400,simN),curMix).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      const vd=pctle(runSim(dn,Math.min(400,simN),curMix).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      sens[k]=(vu-vd)/0.10; totS+=Math.abs(sens[k]);
     });
-    if(!totS)return{ok:false,params:cur,log,final:cv,iters:it+1};
+
+    // Sensitivity for mix levers — perturb mix_pct ±5pp, renormalize
+    const mixSens={};
+    mixLevers.forEach(idx=>{
+      const mUp=curMix.map((c,i)=>i===idx?{...c,mix_pct:c.mix_pct*1.20}:{...c});
+      const mDn=curMix.map((c,i)=>i===idx?{...c,mix_pct:Math.max(0,c.mix_pct*0.80)}:{...c});
+      const vu=pctle(runSim(cur,Math.min(400,simN),mUp).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      const vd=pctle(runSim(cur,Math.min(400,simN),mDn).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      mixSens[idx]=(vu-vd)/0.40; totS+=Math.abs(mixSens[idx]);
+    });
+
+    if(!totS)return{ok:false,params:cur,mix:curMix,log,final:cv,iters:it+1};
+
+    // Update PD levers
     levers.forEach(k=>{
       if(Math.abs(sens[k])<totS*0.01)return;
       const w=Math.abs(sens[k])/totS;
       let nm=cur[k].mean*(1+Math.max(-0.12,Math.min(0.12,(gap/(sens[k]||1))*w*0.35)));
       cur[k]={...cur[k],mean:Math.max(cur[k].min,Math.min(cur[k].max,nm))};
     });
+
+    // Update mix levers — shift pcts, then renormalize
+    mixLevers.forEach(idx=>{
+      if(!mixSens[idx]||Math.abs(mixSens[idx])<totS*0.01)return;
+      const w=Math.abs(mixSens[idx])/totS;
+      const delta=Math.max(-0.15,Math.min(0.15,(gap/(mixSens[idx]||1))*w*0.30));
+      curMix[idx]={...curMix[idx],mix_pct:Math.max(0,curMix[idx].mix_pct*(1+delta))};
+    });
+    // Renormalize mix to sum to 100
+    const mixTotal=curMix.reduce((s,c)=>s+c.mix_pct,0)||1;
+    curMix=curMix.map(c=>({...c,mix_pct:c.mix_pct/mixTotal*100}));
   }
-  const fR=runSim(cur,simN,mix);
-  return{ok:false,params:cur,log,final:pctle(fR.map(r=>r[metric]).sort((a,b)=>a-b),checkP),iters:maxIter};
+  const fR=runSim(cur,simN,curMix);
+  return{ok:false,params:cur,mix:curMix,log,final:pctle(fR.map(r=>r[metric]).sort((a,b)=>a-b),checkP),iters:maxIter};
 }
 
 // ─── UI ───
@@ -433,6 +458,7 @@ export default function VNMonteCarlo(){
   const[gsTarget,setGsTarget]=useState(100000);
   const[gsConf,setGsConf]=useState(60);
   const[gsLevers,setGsLevers]=useState(()=>{const l={};Object.entries(PD).forEach(([k,v])=>{if(v.lever)l[k]=true;});return l;});
+  const[gsMixLevers,setGsMixLevers]=useState(()=>Object.fromEntries(MIX_DEFAULT.map(c=>[c.cat,false])));
   const[gsResult,setGsResult]=useState(null);
   const[gsRunning,setGsRunning]=useState(false);
   const origRef=useRef(null);
@@ -457,12 +483,16 @@ export default function VNMonteCarlo(){
   const handleGS=useCallback(()=>{
     setGsRunning(true);
     origRef.current={};Object.entries(params).forEach(([k,v])=>{origRef.current[k]={...v};});
+    origRef.current._mix=mix.map(c=>({...c}));
     setTimeout(()=>{
       const lk=Object.keys(gsLevers).filter(k=>gsLevers[k]);
-      const r=goalSeek({params,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix});
+      const mixLeverIdxs=mix.map((c,i)=>gsMixLevers[c.cat]?i:-1).filter(i=>i>=0);
+      const r=goalSeek({params,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix,mixLevers:mixLeverIdxs});
       setGsResult(r);
+      // Apply optimized mix if mix levers were active
+      if(mixLeverIdxs.length>0 && r.mix) setMix(r.mix);
       const optP=r.params;
-      const fr=runSim(optP,numSims,mix);setResults(fr);
+      const fr=runSim(optP,numSims,r.mix||mix);setResults(fr);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(fr.map(x=>x[m]));});
       const se={};Object.keys(optP).filter(k=>k!=="tasa_imp").forEach(k=>{
@@ -474,7 +504,7 @@ export default function VNMonteCarlo(){
       setParams(prev=>{const n={...prev};Object.entries(optP).forEach(([k,v])=>{n[k]={...v};});return n;});
       setGsRunning(false);setTab("goalseeking");
     },80);
-  },[params,gsMetric,gsTarget,gsConf,gsLevers,numSims,mix]);
+  },[params,gsMetric,gsTarget,gsConf,gsLevers,gsMixLevers,numSims,mix]);
 
   const stats=useMemo(()=>{
     if(!results)return null;
@@ -497,11 +527,21 @@ export default function VNMonteCarlo(){
   const leverChanges=useMemo(()=>{
     if(!gsResult||!origRef.current)return[];
     const ch=[];
+    // PD parameter changes
     Object.keys(gsResult.params).forEach(k=>{
       if(!PD[k]||!origRef.current[k])return;
       const o=origRef.current[k].mean,n=gsResult.params[k].mean,p=((n-o)/o)*100;
       if(Math.abs(p)>0.5)ch.push({k,label:PD[k].label,unit:PD[k].unit,o,n,p});
     });
+    // Mix category changes
+    if(gsResult.mix){
+      gsResult.mix.forEach((c,i)=>{
+        const orig=MIX_DEFAULT[i]||origRef.current._mix?.[i];
+        if(!orig)return;
+        const o=orig.mix_pct,n=c.mix_pct,p=((n-o)/o)*100;
+        if(Math.abs(p)>0.5)ch.push({k:`mix_${c.cat}`,label:`Mix ${c.cat}`,unit:"%",o,n,p,isMix:true});
+      });
+    }
     ch.sort((a,b)=>Math.abs(b.p)-Math.abs(a.p));return ch;
   },[gsResult]);
 
@@ -616,6 +656,24 @@ export default function VNMonteCarlo(){
                 </div>
               </div>);
             })}
+            {/* Mix de categorías como palancas */}
+            <div style={{marginBottom:3}}>
+              <div style={{fontSize:"var(--fs-xs)",fontWeight:600,color:C.green}}>🚗 Mix de Categorías (% participación)</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:2,marginTop:2}}>
+                {mix.map(c=>(
+                  <button key={c.cat} onClick={()=>setGsMixLevers(p=>({...p,[c.cat]:!p[c.cat]}))}
+                    style={{padding:"2px 5px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",
+                      border:`1px solid ${gsMixLevers[c.cat]?C.green:C.border}`,cursor:"pointer",
+                      background:gsMixLevers[c.cat]?`${C.green}20`:"transparent",
+                      color:gsMixLevers[c.cat]?C.deep:C.muted}}>
+                    {c.cat} ({c.mix_pct.toFixed(0)}%)
+                  </button>
+                ))}
+              </div>
+              <div style={{fontSize:"var(--fs-xs)",color:C.muted,marginTop:3}}>
+                El algoritmo ajustará el % de estas categorías para maximizar el precio ponderado hacia la meta.
+              </div>
+            </div>
           </div>
           {gsResult&&(
             <div style={{background:C.card,borderRadius:6,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
