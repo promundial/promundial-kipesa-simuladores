@@ -17,21 +17,21 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  FUNNEL COMERCIAL                                        ║
   // ╚═══════════════════════════════════════════════════════════╝
-  leads_mes:            {mean:400,std:60,min:100,max:800,label:"Leads / mes",unit:"u",group:"funnel",lever:true},
-  tasa_conversion:      {mean:11,std:2,min:4,max:25,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true},
-  devoluciones:         {mean:8,std:3,min:0,max:25,label:"% de devoluciones",unit:"%",group:"funnel",lever:true},
+  leads_mes:            {mean:400,std:60,min:100,max:800,label:"Leads / mes",unit:"u",group:"funnel",lever:true,dir:1},
+  tasa_conversion:      {mean:11,std:2,min:4,max:25,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true,dir:1},
+  devoluciones:         {mean:8,std:3,min:0,max:25,label:"% de devoluciones",unit:"%",group:"funnel",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRECIO Y MARGEN                                         ║
   // ╚═══════════════════════════════════════════════════════════╝
   // precio_lista es calculado automáticamente desde el mix de categorías
-  descuento_pct:        {mean:3,std:0.5,min:0,max:15,label:"% Descuento sobre precio de lista",unit:"%",group:"precio",lever:true},
+  descuento_pct:        {mean:3,std:0.5,min:0,max:15,label:"% Descuento sobre precio de lista",unit:"%",group:"precio",lever:true,dir:-1},
   margen_bruto_pct:     {mean:8,std:1.5,min:3,max:15,label:"Margen bruto %",unit:"%",group:"precio",lever:true},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRODUCTIVIDAD COMERCIAL                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  productividad:        {mean:8,std:1.5,min:3,max:15,label:"Unidades / vendedor / mes",unit:"u",group:"prod",lever:true},
+  productividad:        {mean:8,std:1.5,min:3,max:15,label:"Unidades / vendedor / mes",unit:"u",group:"prod",lever:true,dir:1},
   sueldo_base:          {mean:800,std:100,min:400,max:1500,label:"Sueldo base vendedor / mes",unit:"$",group:"prod",lever:false},
   comision_por_u:       {mean:200,std:50,min:50,max:500,label:"Comisión por unidad vendida",unit:"$",group:"prod",lever:false},
   gerente_ventas:       {mean:3000,std:400,min:1500,max:6000,label:"Sueldo gerente ventas / mes",unit:"$",group:"prod",lever:false},
@@ -39,13 +39,13 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  MARKETING                                               ║
   // ╚═══════════════════════════════════════════════════════════╝
-  gasto_marketing:      {mean:12000,std:2000,min:4000,max:30000,label:"Gasto marketing / mes",unit:"$",group:"mktg",lever:true},
-  costo_por_lead:       {mean:30,std:8,min:8,max:80,label:"Costo por lead",unit:"$",group:"mktg",lever:true},
+  gasto_marketing:      {mean:12000,std:2000,min:4000,max:30000,label:"Gasto marketing / mes",unit:"$",group:"mktg",lever:true,dir:-1},
+  costo_por_lead:       {mean:30,std:8,min:8,max:80,label:"Costo por lead",unit:"$",group:"mktg",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  INVENTARIO Y FLOOR PLAN                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  dias_inventario:      {mean:60,std:12,min:10,max:180,label:"Días inventario en piso",unit:"d",group:"inv",lever:true},
+  dias_inventario:      {mean:60,std:12,min:10,max:180,label:"Días inventario en piso",unit:"d",group:"inv",lever:true,dir:-1},
   unidades_transito:    {mean:25,std:5,min:0,max:200,label:"Unidades en tránsito",unit:"u",group:"inv",lever:false},
   unidades_bodega:      {mean:15,std:5,min:0,max:200,label:"Unidades en bodega",unit:"u",group:"inv",lever:false},
   tasa_floorplan:       {mean:9,std:1,min:5,max:15,label:"Tasa floor plan % anual",unit:"%",group:"inv",lever:false},
@@ -55,9 +55,9 @@ const PD = {
   // ╚═══════════════════════════════════════════════════════════╝
   personal_admin_vn:    {mean:3,std:0.5,min:1,max:6,label:"Personal admin VN",unit:"u",group:"gastos",lever:false},
   sueldo_admin:         {mean:1000,std:150,min:500,max:2000,label:"Sueldo admin VN / mes",unit:"$",group:"gastos",lever:false},
-  alquiler_showroom:    {mean:8000,std:1500,min:3000,max:20000,label:"Alquiler showroom / mes",unit:"$",group:"gastos",lever:false},
-  servicios_mes:        {mean:2500,std:500,min:1000,max:5000,label:"Servicios básicos / mes",unit:"$",group:"gastos",lever:false},
-  otros_gastos:         {mean:4000,std:800,min:1500,max:10000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:false},
+  alquiler_showroom:    {mean:8000,std:1500,min:3000,max:20000,label:"Alquiler showroom / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  servicios_mes:        {mean:2500,std:500,min:1000,max:5000,label:"Servicios básicos / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  otros_gastos:         {mean:4000,std:800,min:1500,max:10000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  DEPRECIACIÓN Y AMORTIZACIÓN                             ║
@@ -237,11 +237,16 @@ function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600,mix,mixL
 
     if(!totS)return{ok:false,params:cur,mix:curMix,log,final:cv,iters:it+1};
 
-    // Update PD levers
+    // Update PD levers — respecting direction constraints
     levers.forEach(k=>{
       if(Math.abs(sens[k])<totS*0.01)return;
       const w=Math.abs(sens[k])/totS;
-      let nm=cur[k].mean*(1+Math.max(-0.12,Math.min(0.12,(gap/(sens[k]||1))*w*0.35)));
+      let delta=Math.max(-0.12,Math.min(0.12,(gap/(sens[k]||1))*w*0.35));
+      // dir:-1 means this lever should ONLY decrease (e.g. días inventario, devoluciones, descuento)
+      if(PD[k]?.dir===-1) delta=Math.min(0,delta);
+      // dir:+1 means this lever should ONLY increase (future use)
+      if(PD[k]?.dir===1)  delta=Math.max(0,delta);
+      let nm=cur[k].mean*(1+delta);
       cur[k]={...cur[k],mean:Math.max(cur[k].min,Math.min(cur[k].max,nm))};
     });
 
@@ -652,7 +657,9 @@ export default function VNMonteCarlo(){
               return(<div key={gk} style={{marginBottom:3}}>
                 <div style={{fontSize:"var(--fs-xs)",fontWeight:600,color:gc.c}}>{gc.i} {gc.t}</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:2}}>
-                  {keys.map(k=>(<button key={k} onClick={()=>setGsLevers(p=>({...p,[k]:!p[k]}))} style={{padding:"2px 5px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",border:`1px solid ${gsLevers[k]?C.gold:C.border}`,cursor:"pointer",background:gsLevers[k]?`${C.gold}20`:"transparent",color:gsLevers[k]?C.deep:C.muted}}>{PD[k].label}</button>))}
+                  {keys.map(k=>(<button key={k} onClick={()=>setGsLevers(p=>({...p,[k]:!p[k]}))} style={{padding:"2px 5px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",border:`1px solid ${gsLevers[k]?C.gold:C.border}`,cursor:"pointer",background:gsLevers[k]?`${C.gold}20`:"transparent",color:gsLevers[k]?C.deep:C.muted}}>
+                    {PD[k].dir===1?"↑ ":PD[k].dir===-1?"↓ ":""}{PD[k].label}
+                  </button>))}
                 </div>
               </div>);
             })}
