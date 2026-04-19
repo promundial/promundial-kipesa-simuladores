@@ -146,6 +146,7 @@ function simOnce(P, mix){
 
     // Unidades vendidas = mínimo entre demanda y capacidad
     const uVN          = Math.min(demandaMes, capacidadMax);
+    if(m===0) console.log('simOnce m=0: leads=',leads,'conv=',conv.toFixed(3),'caida=',caida.toFixed(3),'demanda=',demandaMes,'vendFTE=',vendFTE,'prod=',prod.toFixed(1),'cap=',capacidadMax,'uVN=',uVN);
 
     // KPIs de utilización
     const utilizacion  = capacidadMax > 0 ? uVN / capacidadMax : 0;   // % capacidad usada
