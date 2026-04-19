@@ -72,6 +72,8 @@ const PD = {
   tasa_imp:             {mean:32,std:0,min:32,max:32,label:"Tasa impositiva % (IR 32%)",unit:"%",group:"eva_p",lever:false},
   capital_vn:           {mean:1800000,std:200000,min:800000,max:4000000,label:"Capital invertido VN",unit:"$",group:"eva_p",lever:false},
   wacc:                 {mean:14,std:1.5,min:8,max:18,label:"WACC %",unit:"%",group:"eva_p",lever:false},
+  downpayment_pct:      {mean:10,std:2,min:0,max:50,label:"Downpayment % del precio de lista",unit:"%",group:"eva_p",lever:true,dir:1},
+  dias_entrega:         {mean:15,std:5,min:1,max:90,label:"Días promedio reserva → entrega",unit:"d",group:"eva_p",lever:false,dir:-1},
 };
 
 // ── Mix de categorías de vehículos ──────────────────────────────────────
@@ -184,7 +186,18 @@ function simOnce(P, mix){
   const tx=P.tasa_imp.mean/100;
   const un=ebit>0?ebit*(1-tx):ebit;
   const cap=S(P.capital_vn),wacc=S(P.wacc)/100;
-  const eva=un-cap*wacc;
+
+  // Downpayments en cartera reducen el capital invertido neto del dealer.
+  // El banco sigue cobrando floorplan completo — esto solo afecta el cargo de capital (EVA).
+  // unidades_con_reserva = unidades vendidas/mes × (días entrega / 30)
+  // downpayments_en_cartera = unidades_con_reserva × precio_lista_prom × downpayment%
+  const uVNMes = tUVN / 12;
+  const precioListaProm = tMeses > 0 ? tPrecioListaSum / tMeses : 0;
+  const unidadesConReserva = uVNMes * (S(P.dias_entrega) / 30);
+  const downpaymentsCartera = unidadesConReserva * precioListaProm * S(P.downpayment_pct) / 100;
+  const capitalNeto = Math.max(0, cap - downpaymentsCartera);
+
+  const eva = un - capitalNeto * wacc / 12;
 
   // Derived KPIs
   const costoAdq=tUVN>0?((tGMktg+tGLeads)/tUVN):0;
@@ -198,6 +211,7 @@ function simOnce(P, mix){
     margenBruto,cogs:tCOGS,
     gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
     ebitda,ebit,utilidadNeta:un,eva,
+    downpaymentsCartera,capitalNeto,
     uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,rotInv,invPromedio,
   };
 }
@@ -520,6 +534,7 @@ export default function VNMonteCarlo(){
       precioListaSim:ex("precioListaSim"),
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
+      downpaymentsCartera:ex("downpaymentsCartera"),capitalNeto:ex("capitalNeto"),
       uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),invPromedio:ex("invPromedio"),
     };
   },[results]);
@@ -768,10 +783,12 @@ export default function VNMonteCarlo(){
               {l:"(-) IR 32%",v:stats.ebit.p50>0?-stats.ebit.p50*0.32:0,c:C.muted},
               {l:"= UTILIDAD NETA",v:stats.utilidadNeta.p50,b:1,c:C.deep,t:1},
               {l:"(-) Cargo capital",v:-(params.capital_vn.mean*params.wacc.mean/100),c:C.red},
+              {l:"(+) Downpayments en cartera",v:stats.downpaymentsCartera?.p50||0,c:C.teal},
+              {l:"  Capital neto (base WACC)",v:stats.capitalNeto?.p50||0,c:C.muted,indent:true},
               {l:"= EVA",v:stats.eva.p50,b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
             ].map((r,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:"var(--fs-sm)",fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none"}}>
-                <span>{r.l}</span><span style={{color:r.c}}>${fmtF(Math.round(r.v))}</span>
+              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:r.indent?"var(--fs-xs)":"var(--fs-sm)",fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none",marginLeft:r.indent?12:0,opacity:r.indent?0.75:1}}>
+                <span style={{color:r.indent?C.muted:C.text}}>{r.l}</span><span style={{color:r.c}}>${fmtF(Math.round(r.v))}</span>
               </div>
             ))}
           </div>
