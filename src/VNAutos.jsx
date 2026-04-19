@@ -536,6 +536,7 @@ export default function VNMonteCarlo(){
     return{
       ebitda:ex("ebitda"),ebit:ex("ebit"),utilidadNeta:ex("utilidadNeta"),eva:ex("eva"),
       ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),descTotal:ex("descTotal"),ingNeto:ex("ingNeto"),
+      cogs:ex("cogs"),
       precioListaSim:ex("precioListaSim"),
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
@@ -797,22 +798,24 @@ export default function VNMonteCarlo(){
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`,marginBottom:6}}>
             <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN — Mediana Anual</div>
             {[
-              {l:"INGRESOS VN (precio neto)",v:stats.ingTotal.p50,b:1,c:C.deep},
-              {l:"  Precio lista × unidades",v:stats.ingVN.p50,c:C.muted},
-              {l:"  (-) Descuento aplicado",v:stats.descTotal?-stats.descTotal.p50:0,c:C.red},
-              {l:"MARGEN BRUTO",v:stats.margenBruto.p50,b:1,c:C.green,t:1},
-              {l:"(-) GASTOS COMERCIALES",v:-stats.gastosComerciales.p50,b:1,c:C.red,t:1},
-              {l:"(-) FLOOR PLAN",v:-stats.floorPlan.p50,c:C.orange},
-              {l:"(-) GASTOS ADMIN/G&A",v:-stats.gastosAdmin.p50,c:C.red},
-              {l:"= EBITDA",v:stats.ebitda.p50,b:1,c:C.green,t:1},
-              {l:"(-) D&A",v:-stats.da.p50,c:C.muted},
-              {l:"= EBIT",v:stats.ebit.p50,b:1,c:C.blue,t:1},
-              {l:"(-) IR 32%",v:stats.ebit.p50>0?-stats.ebit.p50*0.32:0,c:C.muted},
-              {l:"= UTILIDAD NETA",v:stats.utilidadNeta.p50,b:1,c:C.deep,t:1},
-              {l:"(-) Cargo capital",v:-(params.capital_vn.mean*params.wacc.mean/100),c:C.red},
-              {l:"(+) Downpayments en cartera",v:stats.downpaymentsCartera?.p50||0,c:C.teal},
-              {l:"  Capital neto (base WACC)",v:stats.capitalNeto?.p50||0,c:C.muted,indent:true},
-              {l:"= EVA",v:stats.eva.p50,b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
+              {l:"INGRESOS BRUTOS",             v:stats.ingVN.p50,                                    b:1,c:C.deep},
+              {l:"  Precio lista × unidades",   v:stats.ingVN.p50,                                    c:C.muted, indent:true},
+              {l:"(-) Descuentos",              v:stats.descTotal?-stats.descTotal.p50:0,              c:C.red},
+              {l:"= INGRESOS NETOS",            v:stats.ingTotal.p50,                                 b:1,c:C.deep,t:1},
+              {l:"(-) COGS",                    v:-(stats.cogs?.p50||0),                              c:C.muted},
+              {l:"= MARGEN BRUTO",              v:stats.margenBruto.p50,                              b:1,c:C.green,t:1},
+              {l:"(-) GASTOS COMERCIALES",      v:-stats.gastosComerciales.p50,                       b:1,c:C.red,t:1},
+              {l:"(-) FLOOR PLAN",              v:-stats.floorPlan.p50,                               c:C.orange},
+              {l:"(-) GASTOS ADMIN/G&A",        v:-stats.gastosAdmin.p50,                             c:C.red},
+              {l:"= EBITDA",                    v:stats.ebitda.p50,                                   b:1,c:C.green,t:1},
+              {l:"(-) D&A",                     v:-stats.da.p50,                                      c:C.muted},
+              {l:"= EBIT",                      v:stats.ebit.p50,                                     b:1,c:C.blue,t:1},
+              {l:"(-) IR 32%",                  v:stats.ebit.p50>0?-stats.ebit.p50*0.32:0,            c:C.muted},
+              {l:"= UTILIDAD NETA",             v:stats.utilidadNeta.p50,                             b:1,c:C.deep,t:1},
+              {l:"(-) Cargo capital",           v:-(params.capital_vn.mean*params.wacc.mean/100),     c:C.red},
+              {l:"(+) Downpayments en cartera", v:stats.downpaymentsCartera?.p50||0,                  c:C.teal},
+              {l:"  Capital neto (base WACC)",  v:stats.capitalNeto?.p50||0,                          c:C.muted,indent:true},
+              {l:"= EVA",                       v:stats.eva.p50,                                      b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
             ].map((r,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:r.indent?"var(--fs-xs)":"var(--fs-sm)",fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none",marginLeft:r.indent?12:0,opacity:r.indent?0.75:1}}>
                 <span style={{color:r.indent?C.muted:C.text}}>{r.l}</span><span style={{color:r.c}}>${fmtF(Math.round(r.v))}</span>
