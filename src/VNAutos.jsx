@@ -25,7 +25,8 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRECIO Y MARGEN                                         ║
   // ╚═══════════════════════════════════════════════════════════╝
-  precio_promedio:      {mean:28000,std:3000,min:18000,max:50000,label:"Precio promedio venta",unit:"$",group:"precio",lever:false},
+  precio_lista:         {mean:28000,std:3000,min:18000,max:50000,label:"Precio de lista (antes descuento)",unit:"$",group:"precio",lever:false},
+  descuento_pct:        {mean:3,std:0.5,min:0,max:15,label:"% Descuento sobre precio de lista",unit:"%",group:"precio",lever:true},
   margen_bruto_pct:     {mean:8,std:1.5,min:3,max:15,label:"Margen bruto %",unit:"%",group:"precio",lever:true},
 
   // ╔═══════════════════════════════════════════════════════════╗
@@ -82,7 +83,7 @@ const fmtF=v=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(v)
 
 // ═══ SIMULATION ═══
 function simOnce(P){
-  let tIngVN=0,tCOGS=0,tUVN=0,tVend=0;
+  let tIngVN=0,tCOGS=0,tUVN=0,tVend=0,tIngLista=0,tDescuento=0;
   let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0;
 
   for(let m=0;m<12;m++){
@@ -92,10 +93,14 @@ function simOnce(P){
     const aprobados=Math.round(leads*conv);
     const caida=S(P.devoluciones)/100;
     const uVN=Math.round(aprobados*(1-caida));
-    const precio=S(P.precio_promedio);
+    const precioLista=S(P.precio_lista);
+    const descuento=S(P.descuento_pct)/100;
+    const precio=precioLista*(1-descuento);
     const mb=S(P.margen_bruto_pct)/100;
 
     tIngVN+=uVN*precio;
+    tIngLista+=uVN*precioLista;
+    tDescuento+=uVN*precioLista*descuento;
     tCOGS+=uVN*precio*(1-mb); tUVN+=uVN;
 
     // Headcount from productivity
@@ -136,7 +141,7 @@ function simOnce(P){
   const rotInv=tUVN>0?(tUVN/(S(P.unidades_stock)||1)):0;
 
   return{
-    ingTotal,ingVN:tIngVN,
+    ingTotal,ingVN:tIngLista,descTotal:tDescuento,ingNeto:tIngVN,
     margenBruto,cogs:tCOGS,
     gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
     ebitda,ebit,utilidadNeta:un,eva,
@@ -291,7 +296,7 @@ export default function VNMonteCarlo(){
     const ex=f=>{const v=results.map(r=>r[f]).sort((a,b)=>a-b);return{values:v,mean:avg(v),p10:pctle(v,10),p50:pctle(v,50),p90:pctle(v,90)};};
     return{
       ebitda:ex("ebitda"),ebit:ex("ebit"),utilidadNeta:ex("utilidadNeta"),eva:ex("eva"),
-      ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),
+      ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),descTotal:ex("descTotal"),ingNeto:ex("ingNeto"),
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
       uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),
@@ -369,6 +374,17 @@ export default function VNMonteCarlo(){
             if(!keys.length)return null;
             return(<Section key={gk} title={gc.t} icon={gc.i} color={gc.c} defaultOpen={["funnel","precio","prod"].includes(gk)}>
               {keys.map(k=><PI key={k} k={k} p={PD[k]} val={params[k]} onChange={chg} hl={gsLevers[k]}/>)}
+              {gk==="precio"&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,padding:"5px 7px",background:`${C.green}12`,borderRadius:4,border:`1px solid ${C.green}30`}}>
+                  <span style={{fontSize:9,color:C.muted,fontFamily:"var(--mono)",flexShrink:0}}>Precio neto efectivo (μ):</span>
+                  <span style={{fontSize:11,fontWeight:700,color:C.green,fontFamily:"var(--mono)"}}>
+                    ${fmtF(Math.round(params.precio_lista?.mean*(1-(params.descuento_pct?.mean||0)/100)))}
+                  </span>
+                  <span style={{fontSize:8,color:C.muted,fontFamily:"var(--mono)"}}>
+                    = ${fmtF(params.precio_lista?.mean)} × (1 − {(params.descuento_pct?.mean||0).toFixed(1)}%)
+                  </span>
+                </div>
+              )}
             </Section>);
           })}
         </div>)}
@@ -477,8 +493,9 @@ export default function VNMonteCarlo(){
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`,marginBottom:6}}>
             <div style={{fontFamily:"var(--serif)",fontSize:12,fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN — Mediana Anual</div>
             {[
-              {l:"INGRESOS VN",v:stats.ingTotal.p50,b:1,c:C.deep},
-              {l:"  Venta vehículos",v:stats.ingVN.p50,c:C.green},
+              {l:"INGRESOS VN (precio neto)",v:stats.ingTotal.p50,b:1,c:C.deep},
+              {l:"  Precio lista × unidades",v:stats.ingVN.p50,c:C.muted},
+              {l:"  (-) Descuento aplicado",v:stats.descTotal?-stats.descTotal.p50:0,c:C.red},
               {l:"MARGEN BRUTO",v:stats.margenBruto.p50,b:1,c:C.green,t:1},
               {l:"(-) GASTOS COMERCIALES",v:-stats.gastosComerciales.p50,b:1,c:C.red,t:1},
               {l:"(-) FLOOR PLAN",v:-stats.floorPlan.p50,c:C.orange},
