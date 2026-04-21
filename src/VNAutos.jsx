@@ -47,8 +47,8 @@ const PD = {
   // ║  INVENTARIO Y FLOOR PLAN                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
   dias_inventario:      {mean:60,std:12,min:10,max:180,label:"Días inventario en piso",unit:"d",group:"inv",lever:true,dir:-1},
-  unidades_transito:    {mean:25,std:5,min:0,max:200,label:"Unidades en tránsito",unit:"u",group:"inv",lever:false},
-  unidades_bodega:      {mean:15,std:5,min:0,max:200,label:"Unidades en bodega",unit:"u",group:"inv",lever:false},
+  unidades_transito:    {mean:500,std:0,min:0,max:5000,label:"Unidades en tránsito",unit:"u",group:"inv",lever:false},
+  unidades_bodega:      {mean:500,std:0,min:0,max:5000,label:"Unidades en bodega",unit:"u",group:"inv",lever:false},
   tasa_floorplan:       {mean:9,std:1,min:5,max:15,label:"Tasa floor plan % anual",unit:"%",group:"inv",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
@@ -952,6 +952,14 @@ export default function VNMonteCarlo(){
             <div style={{background:`${C.orange}18`,border:`1px solid ${C.orange}60`,borderRadius:5,padding:"7px 10px",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:"var(--fs-md)"}}>⚠️</span>
               <span style={{fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.orange,fontWeight:600}}>
+                Los supuestos cambiaron desde la última simulación. Presiona ▶ Simular para actualizar los resultados.
+              </span>
+            </div>
+          )}
+          {resultsStale&&(
+            <div style={{background:"#D4772C18",border:"1px solid #D4772C60",borderRadius:5,padding:"7px 10px",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:"var(--fs-md)"}}>⚠️</span>
+              <span style={{fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:"#D4772C",fontWeight:600}}>
                 Los supuestos cambiaron desde la última simulación. Presiona ▶ Simular para actualizar los resultados.
               </span>
             </div>
