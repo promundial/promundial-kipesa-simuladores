@@ -222,13 +222,17 @@ function simOnce(P, mix){
   const ebitda=margenBruto-gastosOperativos;
   const ebit=ebitda-tDA;
   const tx=S(P.tasa_imp)/100;
-  // Utilidad neta: EBIT - IR - Floor Plan (costo financiero de inventario)
-  const ebitMenosIR=ebit>0?ebit*(1-tx):ebit;
-  const un=ebitMenosIR-tFP;
+  // EBT = EBIT − Floor Plan (el costo financiero reduce la base imponible)
+  const ebt=ebit-tFP;
+  // IR se aplica sobre EBT, no sobre EBIT
+  const irAnual=ebt>0?ebt*tx:0;
+  // Utilidad neta: EBT − IR
+  const un=ebt-irAnual;
   const cap=S(P.capital_vn),wacc=S(P.wacc)/100;
 
   // EVA = NOPAT - (Capital Invertido × WACC)
   // NOPAT = EBIT × (1 - tasa_imp)  — rendimiento operativo después de impuestos, sin costo financiero
+  // NOPAT mantiene base EBIT (no EBT) porque el costo financiero ya está capturado en el cargo de capital del EVA
   const nopat = ebit > 0 ? ebit * (1 - tx) : ebit;
   // Downpayments en cartera reducen el capital invertido neto del dealer.
   const uVNMes = tUVN / 12;
@@ -253,7 +257,7 @@ function simOnce(P, mix){
     precioListaSim: tMeses>0 ? tPrecioListaSum/tMeses : 0,
     margenBruto,cogs:tCOGS,
     gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal:gastosOperativos,da:tDA,
-    ebitda,ebit,nopat,utilidadNeta:un,eva,
+    ebitda,ebit,ebt,irAnual,nopat,utilidadNeta:un,eva,
     downpaymentsCartera,capitalNeto,
     uVN:tUVN,vendProm:tVend/12,utilizacion:tUtilizacion/12,prospectosPerdidos:tProstPerd/12,
     costoAdq,margenPorU,margenRealPct,rotInv,invPromedio,
@@ -633,7 +637,7 @@ export default function VNMonteCarlo(){
     if(!results)return null;
     const ex=f=>{const v=results.map(r=>r[f]).sort((a,b)=>a-b);return{values:v,mean:avg(v),p10:pctle(v,10),p50:pctle(v,50),p90:pctle(v,90)};};
     return{
-      ebitda:ex("ebitda"),ebit:ex("ebit"),utilidadNeta:ex("utilidadNeta"),eva:ex("eva"),
+      ebitda:ex("ebitda"),ebit:ex("ebit"),ebt:ex("ebt"),irAnual:ex("irAnual"),utilidadNeta:ex("utilidadNeta"),eva:ex("eva"),
       ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),descTotal:ex("descTotal"),ingNeto:ex("ingNeto"),
       cogs:ex("cogs"),
       precioListaSim:ex("precioListaSim"),
@@ -977,8 +981,9 @@ export default function VNMonteCarlo(){
               {l:"= EBITDA",                    v:stats.ebitda.p50,                                   b:1,c:C.green,t:1},
               {l:"(-) D&A",                     v:-stats.da.p50,                                      c:C.muted},
               {l:"= EBIT",                      v:stats.ebit.p50,                                     b:1,c:C.blue,t:1},
-              {l:`(-) IR ${params.tasa_imp.mean}%`, v:stats.ebit.p50>0?-stats.ebit.p50*(params.tasa_imp.mean/100):0, c:C.muted},
               {l:"(-) Floor Plan (costo financiero inventario)", v:-stats.floorPlan.p50,              c:C.orange},
+              {l:"= EBT  (base imponible)",      v:stats.ebt?.p50||0,                                 b:1,c:C.blue,t:1},
+              {l:`(-) IR ${params.tasa_imp.mean}%`, v:-(stats.irAnual?.p50||0),                        c:C.muted},
               {l:"= UTILIDAD NETA",             v:stats.utilidadNeta.p50,                             b:1,c:C.deep,t:1},
               {l:"(-) Cargo capital (Capital × WACC)", v:-(stats.capitalNeto?.p50||0)*(params.wacc.mean/100), c:C.red},
               {l:"(+) Downpayments en cartera", v:stats.downpaymentsCartera?.p50||0,                  c:C.teal},
