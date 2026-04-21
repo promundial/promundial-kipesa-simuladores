@@ -726,6 +726,12 @@ export default function VNMonteCarlo(){
           <button onClick={handleRun} disabled={running} style={{padding:"8px 18px",borderRadius:4,border:"none",cursor:"pointer",background:running?C.muted:`linear-gradient(135deg,${C.green},${C.deep})`,color:"#fff",fontSize:"var(--fs-sm)",fontWeight:600}}>{running?"⏳...":"▶ Simular"}</button>
           <button onClick={handleGS} disabled={gsRunning} style={{padding:"8px 18px",borderRadius:4,border:"none",cursor:"pointer",background:gsRunning?C.muted:`linear-gradient(135deg,${C.gold},${C.orange})`,color:"#fff",fontSize:"var(--fs-sm)",fontWeight:600}}>{gsRunning?"⏳...":"🎯 Goal-Seek"}</button>
           <select value={numSims} onChange={e=>setNumSims(+e.target.value)} style={{...inpS,width:70}}>{[1000,3000,5000].map(n=><option key={n} value={n}>{n}</option>)}</select>
+          <button onClick={()=>{
+            setParams(p=>{const n={};Object.entries(p).forEach(([k,v])=>{n[k]={...v,std:0};});paramsRef.current=n;return n;});
+            syncSetMix(prev=>prev.map(c=>({...c,mix_std:0,desc_std:0})));
+          }} style={{padding:"8px 12px",borderRadius:4,border:`1px solid ${C.border}`,cursor:"pointer",background:C.light,color:C.muted,fontSize:"var(--fs-sm)",fontWeight:500}} title="Pone todas las desviaciones estándar en 0 — modo determinístico para validar fórmulas">
+            σ = 0
+          </button>
         </div>
 
         <div style={{display:"flex",gap:0,marginBottom:8}}>
