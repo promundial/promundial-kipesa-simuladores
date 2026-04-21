@@ -231,8 +231,7 @@ function simOnce(P, mix){
   const cap=S(P.capital_vn),wacc=S(P.wacc)/100;
 
   // EVA = NOPAT - (Capital Invertido × WACC)
-  // NOPAT = EBIT × (1 - tasa_imp)  — rendimiento operativo después de impuestos, sin costo financiero
-  // NOPAT mantiene base EBIT (no EBT) porque el costo financiero ya está capturado en el cargo de capital del EVA
+  // NOPAT = EBIT × (1 - tasa_imp) — base operativa; el costo financiero no entra aquí porque ya está en el cargo de capital del EVA
   const nopat = ebit > 0 ? ebit * (1 - tx) : ebit;
   // Downpayments en cartera reducen el capital invertido neto del dealer.
   const uVNMes = tUVN / 12;
@@ -982,7 +981,7 @@ export default function VNMonteCarlo(){
               {l:"(-) D&A",                     v:-stats.da.p50,                                      c:C.muted},
               {l:"= EBIT",                      v:stats.ebit.p50,                                     b:1,c:C.blue,t:1},
               {l:"(-) Floor Plan (costo financiero inventario)", v:-stats.floorPlan.p50,              c:C.orange},
-              {l:"= EBT  (base imponible)",      v:stats.ebt?.p50||0,                                 b:1,c:C.blue,t:1},
+              {l:"= EBT  (base imponible)",      v:(stats.ebt?.p50||0),                               b:1,c:C.blue,t:1},
               {l:`(-) IR ${params.tasa_imp.mean}%`, v:-(stats.irAnual?.p50||0),                        c:C.muted},
               {l:"= UTILIDAD NETA",             v:stats.utilidadNeta.p50,                             b:1,c:C.deep,t:1},
               {l:"(-) Cargo capital (Capital × WACC)", v:-(stats.capitalNeto?.p50||0)*(params.wacc.mean/100), c:C.red},
