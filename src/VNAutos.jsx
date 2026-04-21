@@ -554,6 +554,7 @@ export default function VNMonteCarlo(){
   const[gsMixLevers,setGsMixLevers]=useState(()=>Object.fromEntries(MIX_DEFAULT.map(c=>[c.cat,false])));
   const[gsResult,setGsResult]=useState(null);
   const[gsRunning,setGsRunning]=useState(false);
+  const[resultsStale,setResultsStale]=useState(false);
   const origRef=useRef(null);
 
   const chg=useCallback((k,f,v)=>{
@@ -562,6 +563,7 @@ export default function VNMonteCarlo(){
       paramsRef.current=updated; // sync update so handleRun always has latest
       return updated;
     });
+    setResultsStale(true);
   },[]);
 
   const syncSetMix = useCallback((updater) => {
@@ -570,6 +572,7 @@ export default function VNMonteCarlo(){
       mixRef.current = next;
       return next;
     });
+    setResultsStale(true);
   }, []);
   const paramsRef = useRef(params);
   const mixRef    = useRef(mix);
@@ -592,7 +595,7 @@ export default function VNMonteCarlo(){
         const tr=runSim(tw,Math.min(500,numSims),currentMix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(r=>r[m]))-bv[m];});
       });
-      setSensData(se);setRunning(false);setTab("results");
+      setSensData(se);setRunning(false);setResultsStale(false);setTab("results");
     },50);
   },[numSims]);
 
@@ -622,7 +625,7 @@ export default function VNMonteCarlo(){
       });
       setSensData(se);
       setParams(prev=>{const n={...prev};Object.entries(optP).forEach(([k,v])=>{n[k]={...v};});return n;});
-      setGsRunning(false);setTab("goalseeking");
+      setGsRunning(false);setResultsStale(false);setTab("goalseeking");
     },80);
   },[gsMetric,gsTarget,gsConf,gsLevers,gsMixLevers,numSims]);
 
@@ -945,7 +948,15 @@ export default function VNMonteCarlo(){
 
           {/* P&L */}
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`,marginBottom:6}}>
-            <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN — Mediana Anual</div>
+            {resultsStale&&(
+            <div style={{background:`${C.orange}18`,border:`1px solid ${C.orange}60`,borderRadius:5,padding:"7px 10px",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:"var(--fs-md)"}}>⚠️</span>
+              <span style={{fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.orange,fontWeight:600}}>
+                Los supuestos cambiaron desde la última simulación. Presiona ▶ Simular para actualizar los resultados.
+              </span>
+            </div>
+          )}
+          <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN — Mediana Anual</div>
             {[
               {l:"INGRESOS BRUTOS",             v:stats.ingVN.p50,                                    b:1,c:C.deep},
               {l:"  Precio lista × unidades",   v:stats.ingVN.p50,                                    c:C.muted, indent:true},
