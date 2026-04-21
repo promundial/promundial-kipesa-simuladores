@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 
 // ═══════════════════════════════════════════════════════════════════════
 // SIMULADOR MONTE CARLO — VENTA DE AUTOS NUEVOS
@@ -17,60 +17,77 @@ const PD = {
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  FUNNEL COMERCIAL                                        ║
   // ╚═══════════════════════════════════════════════════════════╝
-  leads_mes:            {mean:600,std:100,min:150,max:1500,label:"Leads / mes",unit:"u",group:"funnel",lever:true},
-  tasa_conversion:      {mean:15,std:3,min:5,max:30,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true},
-  cierre_1er_contacto:  {mean:45,std:8,min:20,max:70,label:"% cierre en 1er contacto",unit:"%",group:"funnel",lever:true},
+  leads_mes:            {mean:400,std:60,min:100,max:50000,label:"Leads / mes",unit:"u",group:"funnel",lever:true,dir:1},
+  tasa_conversion:      {mean:11,std:2,min:4,max:65,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true,dir:1},
+  devoluciones:         {mean:8,std:3,min:0,max:25,label:"% de devoluciones",unit:"%",group:"funnel",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRECIO Y MARGEN                                         ║
   // ╚═══════════════════════════════════════════════════════════╝
-  precio_promedio:      {mean:3000,std:600,min:1200,max:8000,label:"Precio promedio venta",unit:"$",group:"precio",lever:false},
-  margen_bruto_pct:     {mean:13,std:2,min:5,max:22,label:"Margen bruto %",unit:"%",group:"precio",lever:true},
+  // precio_lista es calculado automáticamente desde el mix de categorías
+  descuento_pct:        {mean:3,std:0.5,min:0,max:15,label:"% Descuento sobre precio de lista",unit:"%",group:"precio",lever:true,dir:-1},
+  margen_bruto_pct:     {mean:8,std:1.5,min:3,max:65,label:"Margen bruto %",unit:"%",group:"precio",lever:true},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRODUCTIVIDAD COMERCIAL                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  productividad:        {mean:20,std:4,min:8,max:40,label:"Unidades / vendedor / mes",unit:"u",group:"prod",lever:true},
-  sueldo_base:          {mean:450,std:80,min:250,max:900,label:"Sueldo base vendedor / mes",unit:"$",group:"prod",lever:false},
-  comision_por_u:       {mean:40,std:15,min:10,max:100,label:"Comisión por unidad vendida",unit:"$",group:"prod",lever:false},
-  gerente_ventas:       {mean:1500,std:250,min:800,max:3000,label:"Sueldo gerente ventas / mes",unit:"$",group:"prod",lever:false},
+  vendedores_fte:        {mean:8,std:0,min:1,max:500,label:"Vendedores FTE (dotación actual)",unit:"u",group:"prod",lever:true,dir:1},
+  productividad:         {mean:8,std:1.5,min:1,max:200,label:"Unidades / vendedor / mes (capacidad)",unit:"u",group:"prod",lever:true,dir:1},
+  sueldo_base:           {mean:800,std:100,min:0,max:10000,label:"Sueldo base vendedor / mes",unit:"$",group:"prod",lever:false},
+  comision_por_u:        {mean:200,std:50,min:0,max:5000,label:"Comisión por unidad vendida",unit:"$",group:"prod",lever:false},
+  gerente_ventas:        {mean:3000,std:400,min:0,max:30000,label:"Sueldo gerente ventas / mes",unit:"$",group:"prod",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  MARKETING                                               ║
   // ╚═══════════════════════════════════════════════════════════╝
-  gasto_marketing:      {mean:5000,std:1000,min:1500,max:15000,label:"Gasto marketing / mes",unit:"$",group:"mktg",lever:true},
-  costo_por_lead:       {mean:12,std:4,min:3,max:35,label:"Costo por lead",unit:"$",group:"mktg",lever:true},
+  gasto_marketing:      {mean:12000,std:2000,min:0,max:500000,label:"Gasto marketing / mes",unit:"$",group:"mktg",lever:true,dir:-1},
+  costo_por_lead:       {mean:30,std:8,min:0,max:1000,label:"Costo por lead",unit:"$",group:"mktg",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  INVENTARIO Y FLOOR PLAN                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  dias_inventario:      {mean:45,std:10,min:15,max:90,label:"Días inventario motos",unit:"d",group:"inv",lever:true},
-  unidades_stock:       {mean:200,std:40,min:50,max:500,label:"Unidades en stock (promedio)",unit:"u",group:"inv",lever:false},
-  tasa_floorplan:       {mean:10,std:1.5,min:5,max:18,label:"Tasa floor plan % anual",unit:"%",group:"inv",lever:false},
+  dias_inventario:      {mean:60,std:12,min:10,max:360,label:"Días inventario en piso",unit:"d",group:"inv",lever:true,dir:-1},
+  unidades_transito:    {mean:25,std:5,min:0,max:200,label:"Unidades en tránsito",unit:"u",group:"inv",lever:false},
+  unidades_bodega:      {mean:15,std:5,min:0,max:200,label:"Unidades en bodega",unit:"u",group:"inv",lever:false},
+  tasa_floorplan:       {mean:9,std:1,min:5,max:15,label:"Tasa floor plan % anual",unit:"%",group:"inv",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  GASTOS FIJOS Y OVERHEAD                                 ║
   // ╚═══════════════════════════════════════════════════════════╝
-  personal_admin_vn:    {mean:2,std:0.5,min:1,max:4,label:"Personal admin VN motos",unit:"u",group:"gastos",lever:false},
-  sueldo_admin:         {mean:700,std:100,min:400,max:1400,label:"Sueldo admin VN motos / mes",unit:"$",group:"gastos",lever:false},
-  alquiler_showroom:    {mean:3500,std:800,min:1500,max:10000,label:"Alquiler punto de venta / mes",unit:"$",group:"gastos",lever:false},
-  servicios_mes:        {mean:1200,std:300,min:500,max:3000,label:"Servicios básicos / mes",unit:"$",group:"gastos",lever:false},
-  otros_gastos:         {mean:2000,std:500,min:800,max:5000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:false},
+  personal_admin_vn:    {mean:3,std:0.5,min:0,max:100,label:"Personal admin VN",unit:"u",group:"gastos",lever:false},
+  sueldo_admin:         {mean:1000,std:150,min:0,max:20000,label:"Sueldo admin VN / mes",unit:"$",group:"gastos",lever:false},
+  alquiler_showroom:    {mean:8000,std:1500,min:0,max:200000,label:"Alquiler showroom / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  servicios_mes:        {mean:2500,std:500,min:0,max:50000,label:"Servicios básicos / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  otros_gastos:         {mean:4000,std:800,min:0,max:2000000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  DEPRECIACIÓN Y AMORTIZACIÓN                             ║
   // ╚═══════════════════════════════════════════════════════════╝
-  deprec_showroom:      {mean:1000,std:200,min:0,max:3000,label:"Depreciación punto de venta / mes",unit:"$",group:"dya",lever:false},
-  deprec_vehiculos:     {mean:500,std:100,min:0,max:1500,label:"Depreciación demos / utilitarios",unit:"$",group:"dya",lever:false},
-  amort_software:       {mean:400,std:100,min:0,max:1000,label:"Amortización CRM/DMS / mes",unit:"$",group:"dya",lever:false},
+  deprec_showroom:      {mean:3000,std:400,min:0,max:100000,label:"Depreciación showroom / mes",unit:"$",group:"dya",lever:false},
+  deprec_vehiculos:     {mean:2000,std:300,min:0,max:50000,label:"Depreciación demos / utilitarios",unit:"$",group:"dya",lever:false},
+  amort_software:       {mean:800,std:200,min:0,max:500000,label:"Amortización CRM/DMS / mes",unit:"$",group:"dya",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  EVA                                                     ║
   // ╚═══════════════════════════════════════════════════════════╝
-  tasa_imp:             {mean:32,std:0,min:32,max:32,label:"Tasa impositiva % (IR 32%)",unit:"%",group:"eva_p",lever:false},
-  capital_vn:           {mean:400000,std:60000,min:150000,max:1000000,label:"Capital invertido VN motos",unit:"$",group:"eva_p",lever:false},
-  wacc:                 {mean:14,std:1.5,min:8,max:18,label:"WACC %",unit:"%",group:"eva_p",lever:false},
+  tasa_imp:             {mean:32,std:0,min:28,max:35,label:"Tasa impositiva % (IR)",unit:"%",group:"eva_p",lever:false},
+  capital_vn:           {mean:1800000,std:200000,min:0,max:300000000,label:"Capital invertido VN",unit:"$",group:"eva_p",lever:false},
+  wacc:                 {mean:14,std:1.5,min:0,max:50,label:"WACC %",unit:"%",group:"eva_p",lever:false},
+  downpayment_pct:      {mean:10,std:2,min:0,max:50,label:"Downpayment % del precio de lista",unit:"%",group:"eva_p",lever:true,dir:1},
+  dias_entrega:         {mean:15,std:5,min:1,max:360,label:"Días promedio reserva → entrega",unit:"d",group:"eva_p",lever:false,dir:-1},
 };
+
+// ── Mix de categorías de vehículos ──────────────────────────────────────
+// mix_pct: % promedio de ventas en esa categoría (deben sumar ~100)
+// mix_std: desviación estándar del % (variabilidad mes a mes)
+// precio_mean / precio_std: precio de lista promedio y σ dentro de la categoría
+const MIX_DEFAULT = [
+  {cat:"Scooter",    mix_pct:30, mix_std:4, precio_mean:2200, precio_std:300,  desc_pct:2.5, desc_std:0.5},
+  {cat:"Mensajera",  mix_pct:25, mix_std:4, precio_mean:1800, precio_std:200,  desc_pct:2.0, desc_std:0.5},
+  {cat:"On-Off",     mix_pct:20, mix_std:3, precio_mean:4500, precio_std:600,  desc_pct:1.5, desc_std:0.5},
+  {cat:"Street",     mix_pct:20, mix_std:3, precio_mean:3800, precio_std:500,  desc_pct:2.0, desc_std:0.5},
+  {cat:"Otros",      mix_pct: 5, mix_std:2, precio_mean:2800, precio_std:400,  desc_pct:3.0, desc_std:1.0},
+];
 
 function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
 function S(p){return Math.max(p.min,Math.min(p.max,p.mean+randn()*p.std));}
@@ -79,34 +96,112 @@ function avg(a){return a.reduce((x,y)=>x+y,0)/a.length;}
 const fmt=v=>{if(Math.abs(v)>=1e6)return(v/1e6).toFixed(2)+"M";if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+"K";return v.toFixed(0);};
 const fmtF=v=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(v);
 
+// Muestrea precio de lista ponderado desde el mix de categorías.
+// 1) Muestrea % de cada categoría con Normal(mix_pct, mix_std), clamp ≥ 0
+// 2) Normaliza para que sumen 100%
+// 3) Muestrea precio de cada categoría con Normal(precio_mean, precio_std)
+// 4) Retorna precio ponderado
+// Returns { precioLista, descuentoPct } both weighted by sampled mix
+function samplePrecioConDesc(mix){
+  const raw=mix.map(c=>Math.max(0, c.mix_pct+randn()*c.mix_std));
+  const total=raw.reduce((s,v)=>s+v,0)||1;
+  const weights=raw.map(v=>v/total);
+  const precioLista=mix.reduce((s,c,i)=>s+weights[i]*Math.max(0,c.precio_mean+randn()*c.precio_std),0);
+  // Per-category discount: use desc_pct/desc_std if available, else 0
+  const descuentoPct=mix.reduce((s,c,i)=>{
+    const dp=c.desc_pct||0, ds=c.desc_std||0;
+    return s+weights[i]*Math.max(0,Math.min(dp+randn()*ds,20))/100;
+  },0);
+  return{precioLista,descuentoPct};
+}
+// Keep legacy for display helpers
+function samplePrecioLista(mix){return samplePrecioConDesc(mix).precioLista;}
+// Precio ponderado determinístico (medias) — para display en tiempo real
+function precioListaMedio(mix){
+  const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
+  return mix.reduce((s,c)=>s+(c.mix_pct/total)*c.precio_mean,0);
+}
+// Descuento ponderado medio por categoría — display
+function descuentoMixMedio(mix){
+  const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
+  return mix.reduce((s,c)=>s+(c.mix_pct/total)*(c.desc_pct||0),0);
+}
+// Desviación estándar implícita ponderada del precio.
+// Solo captura la variabilidad DENTRO de cada categoría (precio_std por categoría).
+// La dispersión ENTRE categorías ya la captura el mix variable — no se duplica aquí.
+// Con todos los σ = 0, el resultado es ±$0 como se espera.
+function precioListaStd(mix){
+  const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
+  return Math.sqrt(mix.reduce((s,c)=>s+(c.mix_pct/total)*c.precio_std**2,0));
+}
+
 // ═══ SIMULATION ═══
-function simOnce(P){
-  let tIngVN=0,tCOGS=0,tUVN=0,tVend=0;
-  let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0;
+function simOnce(P, mix){
+  let tIngVN=0,tCOGS=0,tUVN=0,tVend=0,tIngLista=0,tDescuento=0,tPrecioListaSum=0,tMeses=0;
+  let tGVend=0,tGMktg=0,tGLeads=0,tFP=0,tGAdmin=0,tDA=0,tInvTotal=0,tUtilizacion=0,tProstPerd=0;
 
   for(let m=0;m<12;m++){
-    // Funnel
-    const leads=Math.round(S(P.leads_mes));
-    const conv=S(P.tasa_conversion)/100;
-    const uVN=Math.round(leads*conv);
-    const precio=S(P.precio_promedio);
-    const mb=S(P.margen_bruto_pct)/100;
+    // ── Funnel ──────────────────────────────────────────────────────────
+    // Demanda potencial: leads → conversión → neto de devoluciones
+    const leads        = Math.round(S(P.leads_mes));
+    const conv         = S(P.tasa_conversion)/100;
+    const caida        = S(P.devoluciones)/100;
+    const demandaMes   = Math.round(leads * conv * (1 - caida));
+
+    // Capacidad instalada: FTE × productividad individual
+    // Fallback a 8 si vendedores_fte no existe en params (compatibilidad versiones anteriores)
+    const vendFTEParam = P.vendedores_fte || {mean:8, std:0, min:1, max:100};
+    const vendFTE      = Math.max(1, Math.round(S(vendFTEParam)));
+    const prod         = Math.max(0.1, S(P.productividad));
+    const capacidadMax = Math.floor(vendFTE * prod);
+
+    // Unidades vendidas = mínimo entre demanda y capacidad
+    const uVN          = Math.min(demandaMes, capacidadMax);
+
+    // KPIs de utilización
+    const utilizacion  = capacidadMax > 0 ? uVN / capacidadMax : 0;   // % capacidad usada
+    const prospectosPerdidos = Math.max(0, demandaMes - capacidadMax); // demanda no atendida
+
+    tUtilizacion  += utilizacion;
+    tProstPerd    += prospectosPerdidos;
+    const{precioLista,descuentoPct:descCatPct}=samplePrecioConDesc(mix);
+    const mbBase=S(P.margen_bruto_pct)/100;      // margen negociado con el importador
+    const costoAdqUnit=precioLista*(1-mbBase);    // costo fijo al importador — no cambia con el descuento
+    // Descuento efectivo = mayor entre el global (param) y el ponderado por categoría
+    // Esto permite que el gerente vea el descuento sistémico del mix vs. el táctico global
+    const descGlobal=S(P.descuento_pct)/100;
+    const descuento=Math.max(descGlobal,descCatPct);  // toma el más conservador (mayor costo)
+    const precio=precioLista*(1-descuento);       // precio neto al cliente
+    // margenReal = precio - costoAdq = precioLista×(mbBase - descuento%)
+    // Si descuento > mbBase, margenReal es negativo — el dealer vende bajo costo
 
     tIngVN+=uVN*precio;
-    tCOGS+=uVN*precio*(1-mb); tUVN+=uVN;
+    tIngLista+=uVN*precioLista;
+    tDescuento+=uVN*precioLista*descuento;
+    tCOGS+=uVN*costoAdqUnit;  // COGS siempre sobre costo de adquisición, independiente del descuento
+    tUVN+=uVN;
+    tPrecioListaSum+=precioLista; tMeses++;
 
-    // Headcount from productivity
-    const prod=S(P.productividad);
-    const vendN=Math.ceil(uVN/Math.max(1,prod)); tVend+=vendN;
-    tGVend+=vendN*S(P.sueldo_base)+uVN*S(P.comision_por_u)+S(P.gerente_ventas);
+    // Nómina: se paga la dotación FTE completa independiente de si hay demanda
+    // vendedores_necesarios es informativo — cuántos necesitarías para cubrir la demanda
+    tVend += vendFTE;
+    tGVend += vendFTE * S(P.sueldo_base) + uVN * S(P.comision_por_u) + S(P.gerente_ventas);
 
     // Marketing
     tGMktg+=S(P.gasto_marketing);
     tGLeads+=leads*S(P.costo_por_lead);
 
-    // Floor plan
-    const stock=Math.round(S(P.unidades_stock));
-    tFP+=(stock*precio)*S(P.tasa_floorplan)/100/12;
+    // Floor plan — inventario total financiado:
+    //   stock_piso    = dinámico (función de ventas × días inventario)
+    //   stock_transito = fijo (unidades compradas, en camino)
+    //   stock_bodega   = fijo (unidades recibidas, no en showroom)
+    // El banco cobra desde que el dealer toma titularidad (despacho importador)
+    const stockPiso     = (uVN * S(P.dias_inventario)) / 30;
+    const stockTransito = S(P.unidades_transito);
+    const stockBodega   = S(P.unidades_bodega);
+    const invTotal      = stockPiso + stockTransito + stockBodega;
+    tInvTotal += invTotal;
+    tFP += invTotal * costoAdqUnit * S(P.tasa_floorplan) / 100 / 12;
 
     // Admin & gastos fijos
     const admN=Math.round(S(P.personal_admin_vn));
@@ -119,62 +214,122 @@ function simOnce(P){
   const ingTotal=tIngVN;
   const margenBruto=tIngVN-tCOGS;
   const gastosComerciales=tGVend+tGMktg+tGLeads;
-  const gastosTotal=gastosComerciales+tFP+tGAdmin;
-  const ebitda=margenBruto-gastosTotal;
+  // Floor plan excluido del EBITDA y EBIT — es costo financiero, no operativo
+  const gastosOperativos=gastosComerciales+tGAdmin;
+  const ebitda=margenBruto-gastosOperativos;
   const ebit=ebitda-tDA;
-  const tx=P.tasa_imp.mean/100;
-  const un=ebit>0?ebit*(1-tx):ebit;
+  const tx=S(P.tasa_imp)/100;
+  // Utilidad neta: EBIT - IR - Floor Plan (costo financiero de inventario)
+  const ebitMenosIR=ebit>0?ebit*(1-tx):ebit;
+  const un=ebitMenosIR-tFP;
   const cap=S(P.capital_vn),wacc=S(P.wacc)/100;
-  const eva=un-cap*wacc;
+
+  // EVA = NOPAT - (Capital Invertido × WACC)
+  // NOPAT = EBIT × (1 - tasa_imp)  — rendimiento operativo después de impuestos, sin costo financiero
+  const nopat = ebit > 0 ? ebit * (1 - tx) : ebit;
+  // Downpayments en cartera reducen el capital invertido neto del dealer.
+  const uVNMes = tUVN / 12;
+  const precioListaProm = tMeses > 0 ? tPrecioListaSum / tMeses : 0;
+  const unidadesConReserva = uVNMes * (S(P.dias_entrega) / 30);
+  const downpaymentsCartera = unidadesConReserva * precioListaProm * S(P.downpayment_pct) / 100;
+  const capitalNeto = Math.max(0, cap - downpaymentsCartera);
+
+  // EVA = EBIT×(1−IR) − Capital Invertido×WACC  (cargo anual completo, no /12)
+  const eva = nopat - capitalNeto * wacc;
 
   // Derived KPIs
   const costoAdq=tUVN>0?((tGMktg+tGLeads)/tUVN):0;
   const margenPorU=tUVN>0?(margenBruto/tUVN):0;
-  const rotInv=tUVN>0?(tUVN/(S(P.unidades_stock)||1)):0;
+  // margenRealPct = margenBase% - descuento% (medias, para display)
+  const margenRealPct=(P.margen_bruto_pct.mean - P.descuento_pct.mean);
+  const rotInv=tUVN>0?(tUVN/(S(P.unidades_transito)+S(P.unidades_bodega)||1)):0;
+  const invPromedio=tInvTotal/12;
 
   return{
-    ingTotal,ingVN:tIngVN,
+    ingTotal,ingVN:tIngLista,descTotal:tDescuento,ingNeto:tIngVN,
+    precioListaSim: tMeses>0 ? tPrecioListaSum/tMeses : 0,
     margenBruto,cogs:tCOGS,
-    gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
-    ebitda,ebit,utilidadNeta:un,eva,
-    uVN:tUVN,vendProm:tVend/12,costoAdq,margenPorU,rotInv,
+    gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal:gastosOperativos,da:tDA,
+    ebitda,ebit,nopat,utilidadNeta:un,eva,
+    downpaymentsCartera,capitalNeto,
+    uVN:tUVN,vendProm:tVend/12,utilizacion:tUtilizacion/12,prospectosPerdidos:tProstPerd/12,
+    costoAdq,margenPorU,margenRealPct,rotInv,invPromedio,
   };
 }
-function runSim(P,n){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P));return r;}
+function runSim(P,n,mix){const r=[];for(let i=0;i<n;i++)r.push(simOnce(P,mix));return r;}
 
-function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600}){
+function goalSeek({params,metric,target,conf,levers,maxIter=25,simN=600,mix,mixLevers}){
   let cur={};Object.entries(params).forEach(([k,v])=>{cur[k]={...v};});
+  let curMix=mix.map(c=>({...c}));
   const log=[],checkP=100-conf;
+
   for(let it=0;it<maxIter;it++){
-    const res=runSim(cur,simN);
+    const res=runSim(cur,simN,curMix);
     const vals=res.map(r=>r[metric]).sort((a,b)=>a-b);
     const cv=pctle(vals,checkP),gap=target-cv;
     log.push({it,val:cv,gap});
-    if(Math.abs(gap)<Math.abs(target)*0.02||gap<=0)return{ok:true,params:cur,log,final:cv,iters:it+1};
+    if(Math.abs(gap)<Math.abs(target)*0.02||gap<=0)return{ok:true,params:cur,mix:curMix,log,final:cv,iters:it+1};
+
+    // Sensitivity for PD levers
     const sens={};let totS=0;
     levers.forEach(k=>{
       const up={...cur,[k]:{...cur[k],mean:cur[k].mean*1.05}};
       const dn={...cur,[k]:{...cur[k],mean:cur[k].mean*0.95}};
-      const ru=runSim(up,Math.min(400,simN));
-      const rd=runSim(dn,Math.min(400,simN));
-      const vu=pctle(ru.map(r=>r[metric]).sort((a,b)=>a-b),checkP);
-      const vd=pctle(rd.map(r=>r[metric]).sort((a,b)=>a-b),checkP);
-      sens[k]=(vu-vd)/0.10;totS+=Math.abs(sens[k]);
+      const vu=pctle(runSim(up,Math.min(400,simN),curMix).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      const vd=pctle(runSim(dn,Math.min(400,simN),curMix).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      sens[k]=(vu-vd)/0.10; totS+=Math.abs(sens[k]);
     });
-    if(!totS)return{ok:false,params:cur,log,final:cv,iters:it+1};
+
+    // Sensitivity for mix levers — perturb mix_pct ±5pp, renormalize
+    const mixSens={};
+    mixLevers.forEach(idx=>{
+      const mUp=curMix.map((c,i)=>i===idx?{...c,mix_pct:c.mix_pct*1.20}:{...c});
+      const mDn=curMix.map((c,i)=>i===idx?{...c,mix_pct:Math.max(0,c.mix_pct*0.80)}:{...c});
+      const vu=pctle(runSim(cur,Math.min(400,simN),mUp).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      const vd=pctle(runSim(cur,Math.min(400,simN),mDn).map(r=>r[metric]).sort((a,b)=>a-b),checkP);
+      mixSens[idx]=(vu-vd)/0.40; totS+=Math.abs(mixSens[idx]);
+    });
+
+    if(!totS)return{ok:false,params:cur,mix:curMix,log,final:cv,iters:it+1};
+
+    // Update PD levers — respecting direction constraints
     levers.forEach(k=>{
       if(Math.abs(sens[k])<totS*0.01)return;
       const w=Math.abs(sens[k])/totS;
-      let nm=cur[k].mean*(1+Math.max(-0.12,Math.min(0.12,(gap/(sens[k]||1))*w*0.35)));
+      let delta=Math.max(-0.12,Math.min(0.12,(gap/(sens[k]||1))*w*0.35));
+      // dir:-1 means this lever should ONLY decrease (e.g. días inventario, devoluciones, descuento)
+      if(PD[k]?.dir===-1) delta=Math.min(0,delta);
+      // dir:+1 means this lever should ONLY increase (future use)
+      if(PD[k]?.dir===1)  delta=Math.max(0,delta);
+      let nm=cur[k].mean*(1+delta);
       cur[k]={...cur[k],mean:Math.max(cur[k].min,Math.min(cur[k].max,nm))};
     });
+
+    // Update mix levers — shift pcts, then renormalize
+    mixLevers.forEach(idx=>{
+      if(!mixSens[idx]||Math.abs(mixSens[idx])<totS*0.01)return;
+      const w=Math.abs(mixSens[idx])/totS;
+      const delta=Math.max(-0.15,Math.min(0.15,(gap/(mixSens[idx]||1))*w*0.30));
+      curMix[idx]={...curMix[idx],mix_pct:Math.max(0,curMix[idx].mix_pct*(1+delta))};
+    });
+    // Renormalize mix to sum to 100
+    const mixTotal=curMix.reduce((s,c)=>s+c.mix_pct,0)||1;
+    curMix=curMix.map(c=>({...c,mix_pct:c.mix_pct/mixTotal*100}));
   }
-  const fR=runSim(cur,simN);
-  return{ok:false,params:cur,log,final:pctle(fR.map(r=>r[metric]).sort((a,b)=>a-b),checkP),iters:maxIter};
+  const fR=runSim(cur,simN,curMix);
+  return{ok:false,params:cur,mix:curMix,log,final:pctle(fR.map(r=>r[metric]).sort((a,b)=>a-b),checkP),iters:maxIter};
 }
 
 // ─── UI ───
-function Histo({values,color,label,target,w=286,h=72}){
+function Histo({values,color,label,target,h=72}){
+  const ref=useRef(null);
+  const[w,setW]=useState(320);
+  useEffect(()=>{
+    if(!ref.current)return;
+    const ro=new ResizeObserver(e=>setW(e[0].contentRect.width||320));
+    ro.observe(ref.current);
+    return()=>ro.disconnect();
+  },[]);
   const sorted=[...values].sort((a,b)=>a-b);
   const bins=28,mn=sorted[0],mx=sorted[sorted.length-1],rng=mx-mn||1,bw=rng/bins;
   const cts=new Array(bins).fill(0);
@@ -182,16 +337,16 @@ function Histo({values,color,label,target,w=286,h=72}){
   const maxC=Math.max(...cts),barW=w/bins,toX=v=>Math.max(0,Math.min(w,((v-mn)/rng)*w));
   const p10=pctle(sorted,10),p50=pctle(sorted,50),p90=pctle(sorted,90);
   return(
-    <div style={{marginBottom:8}}>
+    <div ref={ref} style={{marginBottom:8,width:"100%"}}>
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:1}}>
-        <span style={{fontFamily:"var(--serif)",fontSize:11,fontWeight:700,color:C.deep}}>{label}</span>
-        <span style={{fontFamily:"var(--mono)",fontSize:8,color:C.muted}}>μ ${fmt(avg(values))}</span>
+        <span style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep}}>{label}</span>
+        <span style={{fontFamily:"var(--mono)",fontSize:"var(--fs-xs)",color:C.muted}}>μ ${fmt(avg(values))}</span>
       </div>
-      <svg width={w} height={h+18} style={{display:"block"}}>
+      <svg width={w} height={h+20} style={{display:"block",width:"100%"}}>
         {cts.map((c,i)=><rect key={i} x={i*barW} y={h-(c/maxC)*h} width={barW-.5} height={(c/maxC)*h} fill={color} opacity={.45} rx={1}/>)}
-        {target!==undefined&&<><line x1={toX(target)} x2={toX(target)} y1={0} y2={h} stroke={C.red} strokeWidth={2} strokeDasharray="4,3"/><text x={toX(target)} y={h+10} fill={C.red} fontSize={7} fontFamily="var(--mono)" textAnchor="middle">META</text></>}
+        {target!==undefined&&<><line x1={toX(target)} x2={toX(target)} y1={0} y2={h} stroke={C.red} strokeWidth={2} strokeDasharray="4,3"/><text x={toX(target)} y={h+10} fill={C.red} fontSize="9" fontFamily="var(--mono)" textAnchor="middle">META</text></>}
         {[[p10,"#D06838","P10"],[p50,C.deep,"P50"],[p90,C.blue,"P90"]].map(([v,cl,lb])=>(
-          <g key={lb}><line x1={toX(v)} x2={toX(v)} y1={0} y2={h} stroke={cl} strokeWidth={1.2} strokeDasharray={lb==="P50"?"0":"3,2"}/><text x={toX(v)} y={h+16} fill={cl} fontSize={7} fontFamily="var(--mono)" textAnchor="middle">{lb} ${fmt(v)}</text></g>
+          <g key={lb}><line x1={toX(v)} x2={toX(v)} y1={0} y2={h} stroke={cl} strokeWidth={1.2} strokeDasharray={lb==="P50"?"0":"3,2"}/><text x={toX(v)} y={h+18} fill={cl} fontSize="9" fontFamily="var(--mono)" textAnchor="middle">{lb} ${fmt(v)}</text></g>
         ))}
       </svg>
     </div>
@@ -201,35 +356,188 @@ function Histo({values,color,label,target,w=286,h=72}){
 function Section({title,icon,color,children,defaultOpen=false}){
   const[open,setOpen]=useState(defaultOpen);
   return(
-    <div style={{background:C.card,borderRadius:6,marginBottom:6,border:`1px solid ${C.border}`,borderTop:`3px solid ${color}`,overflow:"hidden"}}>
-      <button onClick={()=>setOpen(!open)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
-        <span style={{fontFamily:"var(--serif)",fontSize:12,fontWeight:700,color}}>{icon} {title}</span>
-        <span style={{fontSize:14,color:C.muted,transition:"transform .2s",transform:open?"rotate(180deg)":"rotate(0)"}}>{open?"▾":"▸"}</span>
+    <div style={{background:C.card,borderRadius:"var(--radius)",marginBottom:6,border:`1px solid ${C.border}`,borderTop:`3px solid ${color}`,overflow:"hidden"}}>
+      <button onClick={()=>setOpen(!open)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"var(--pad-y) var(--pad-x)",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+        <span style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color}}>{icon} {title}</span>
+        <span style={{fontSize:"var(--fs-lg)",color:C.muted,transition:"transform .2s",transform:open?"rotate(180deg)":"rotate(0)"}}>{open?"▾":"▸"}</span>
       </button>
-      {open&&<div style={{padding:"0 8px 6px"}}>{children}</div>}
+      {open&&<div style={{padding:`0 var(--pad-x) var(--pad-y)`}}>{children}</div>}
     </div>
   );
 }
 
 function PI({k,p,val,onChange,hl}){
   return(
-    <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:2,background:hl?`${C.gold}12`:"transparent",padding:"1px 3px",borderRadius:3}}>
-      <label style={{width:175,fontSize:9.5,fontFamily:"var(--mono)",color:C.text,flexShrink:0,lineHeight:1.15}}>{p.label}</label>
+    <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3,background:hl?`${C.gold}12`:"transparent",padding:"2px 4px",borderRadius:3}}>
+      <label style={{width:"var(--lbl-w)",fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.text,flexShrink:0,lineHeight:1.3}}>{p.label}</label>
       {["mean","std"].map(f=>(
         <div key={f} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-          <span style={{fontSize:6,color:C.muted,letterSpacing:1}}>{f==="mean"?"μ":"σ"}</span>
+          <span style={{fontSize:"var(--fs-xs)",color:C.muted,letterSpacing:1}}>{f==="mean"?"μ":"σ"}</span>
           <input type="number" value={val[f]} onChange={e=>onChange(k,f,parseFloat(e.target.value)||0)}
-            style={{width:56,padding:"2px 3px",fontSize:10,fontFamily:"var(--mono)",border:`1px solid ${hl?C.gold:C.border}`,borderRadius:2,background:C.light,textAlign:"right"}}/>
+            style={{width:"var(--inp-w)",padding:"3px 4px",fontSize:"var(--fs-sm)",fontFamily:"var(--mono)",border:`1px solid ${hl?C.gold:C.border}`,borderRadius:2,background:C.light,textAlign:"right"}}/>
         </div>
       ))}
-      <span style={{fontSize:7,color:C.muted,width:12}}>{p.unit}</span>
+      <span style={{fontSize:"var(--fs-xs)",color:C.muted,width:14,flexShrink:0}}>{p.unit}</span>
+    </div>
+  );
+}
+
+// ── Mix de Categorías — tabla editable ────────────────────────────────────
+function MixTable({mix, setMix}){
+  const totalPct = mix.reduce((s,c)=>s+c.mix_pct,0);
+  const precioMed = precioListaMedio(mix);
+  const precioSd  = precioListaStd(mix);
+  const descMed   = descuentoMixMedio(mix);
+  const ok = Math.abs(totalPct-100)<1;
+
+  const upd=(i,field,val)=>setMix(prev=>{
+    const n=[...prev]; n[i]={...n[i],[field]:isNaN(val)?0:val}; return n;
+  });
+
+  const cols=[
+    {label:"Categoría",      w:"18%"},
+    {label:"% Mix μ",        w:"8%"},
+    {label:"% Mix σ",        w:"8%"},
+    {label:"Precio μ ($)",   w:"13%"},
+    {label:"Precio σ ($)",   w:"13%"},
+    {label:"Desc % μ",       w:"9%"},
+    {label:"Desc % σ",       w:"9%"},
+    {label:"P.Neto μ",       w:"22%"},
+  ];
+
+  return(
+    <div style={{marginTop:8}}>
+      {/* Resumen calculado */}
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:8,padding:"8px 10px",
+        background:`${C.green}12`,borderRadius:6,border:`1px solid ${C.green}30`}}>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Precio lista ponderado μ</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,color:C.green,fontFamily:"var(--mono)"}}>
+            ${fmtF(Math.round(precioMed))}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Desviación implícita σ</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,color:C.blue,fontFamily:"var(--mono)"}}>
+            ±${fmtF(Math.round(precioSd))}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Desc. ponderado mix μ</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,
+            color:descMed>3?C.red:descMed>2?C.orange:C.teal,fontFamily:"var(--mono)"}}>
+            {descMed.toFixed(2)}%
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Precio neto μ (post-desc)</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,color:C.deep,fontFamily:"var(--mono)"}}>
+            ${fmtF(Math.round(precioMed*(1-descMed/100)))}
+          </div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center"}}>
+          <span style={{fontSize:"var(--fs-sm)",fontWeight:700,padding:"3px 10px",borderRadius:4,
+            background:ok?"#1A5C3820":"#B3404020",
+            color:ok?C.green:C.red,border:`1px solid ${ok?C.green:C.red}50`}}>
+            Σ mix = {totalPct.toFixed(1)}% {ok?"✓":"⚠ debe ser 100%"}
+          </span>
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--fs-xs)"}}>
+          <thead>
+            <tr style={{background:C.deep,color:"#fff"}}>
+              {cols.map(c=>(
+                <th key={c.label} style={{padding:"6px 8px",textAlign:"left",
+                  fontFamily:"var(--mono)",fontWeight:600,width:c.w,whiteSpace:"nowrap"}}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {mix.map((c,i)=>{
+              const w=c.mix_pct/(totalPct||1);
+              const dp=c.desc_pct||0;
+              const precioNeto=c.precio_mean*(1-dp/100);
+              const inp={width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
+                fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
+                borderRadius:2,background:C.light,textAlign:"right"};
+              return(
+                <tr key={i} style={{background:i%2===0?C.light:C.card,
+                  borderBottom:`1px solid ${C.border}`}}>
+                  {/* Nombre categoría */}
+                  <td style={{padding:"4px 8px"}}>
+                    <input value={c.cat} onChange={e=>upd(i,"cat",e.target.value)}
+                      style={{width:"100%",border:"none",background:"transparent",
+                        fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.text}}/>
+                  </td>
+                  {/* % Mix μ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.mix_pct}
+                      onChange={e=>upd(i,"mix_pct",parseFloat(e.target.value))}
+                      style={inp}/>
+                  </td>
+                  {/* % Mix σ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.mix_std}
+                      onChange={e=>upd(i,"mix_std",parseFloat(e.target.value))}
+                      style={inp}/>
+                  </td>
+                  {/* Precio μ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.precio_mean}
+                      onChange={e=>upd(i,"precio_mean",parseFloat(e.target.value))}
+                      style={inp}/>
+                  </td>
+                  {/* Precio σ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.precio_std}
+                      onChange={e=>upd(i,"precio_std",parseFloat(e.target.value))}
+                      style={inp}/>
+                  </td>
+                  {/* Desc % μ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={dp} min={0} max={20} step={0.5}
+                      onChange={e=>upd(i,"desc_pct",parseFloat(e.target.value))}
+                      style={{...inp,border:`1px solid ${dp>3?C.red:dp>2?C.orange:C.border}`,
+                        color:dp>3?C.red:dp>2?C.orange:C.text}}/>
+                  </td>
+                  {/* Desc % σ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.desc_std||0} min={0} max={5} step={0.25}
+                      onChange={e=>upd(i,"desc_std",parseFloat(e.target.value))}
+                      style={inp}/>
+                  </td>
+                  {/* Precio neto = precio × (1 − desc%) */}
+                  <td style={{padding:"4px 8px",fontFamily:"var(--mono)",textAlign:"right"}}>
+                    <span style={{color:C.deep,fontWeight:600}}>${fmtF(Math.round(precioNeto))}</span>
+                    <span style={{color:dp>3?C.red:C.muted,fontSize:"var(--fs-xs)",marginLeft:4}}>
+                      −{dp.toFixed(1)}% ({(w*100).toFixed(1)}%)
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 // ═══ MAIN ═══
-export default function VNMotosMonteCarlo(){
-  const[params,setParams]=useState(()=>{const p={};Object.entries(PD).forEach(([k,v])=>{p[k]={...v};});return p;});
+
+export default function VNMonteCarlo(){
+  const[params,setParams]=useState(()=>{
+    // Always initialize from PD — guarantees all keys exist including newly added ones
+    const p={};
+    Object.entries(PD).forEach(([k,v])=>{p[k]={...v};});
+    return p;
+  });
+  const[mix,setMix]=useState(MIX_DEFAULT.map(c=>({...c})));
   const[numSims,setNumSims]=useState(3000);
   const[results,setResults]=useState(null);
   const[running,setRunning]=useState(false);
@@ -240,58 +548,94 @@ export default function VNMotosMonteCarlo(){
   const[gsTarget,setGsTarget]=useState(100000);
   const[gsConf,setGsConf]=useState(60);
   const[gsLevers,setGsLevers]=useState(()=>{const l={};Object.entries(PD).forEach(([k,v])=>{if(v.lever)l[k]=true;});return l;});
+  const[gsMixLevers,setGsMixLevers]=useState(()=>Object.fromEntries(MIX_DEFAULT.map(c=>[c.cat,false])));
   const[gsResult,setGsResult]=useState(null);
   const[gsRunning,setGsRunning]=useState(false);
   const origRef=useRef(null);
 
-  const chg=useCallback((k,f,v)=>{setParams(p=>({...p,[k]:{...p[k],[f]:v}}));},[]);
+  const chg=useCallback((k,f,v)=>{
+    setParams(p=>{
+      const updated={...p,[k]:{...p[k],[f]:v}};
+      paramsRef.current=updated; // sync update so handleRun always has latest
+      return updated;
+    });
+  },[]);
+
+  const syncSetMix = useCallback((updater) => {
+    setMix(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      mixRef.current = next;
+      return next;
+    });
+  }, []);
+  const paramsRef = useRef(params);
+  const mixRef    = useRef(mix);
+  useEffect(()=>{ paramsRef.current = params; }, [params]);
+  useEffect(()=>{ mixRef.current    = mix;    }, [mix]);
 
   const handleRun=useCallback(()=>{
     setRunning(true);
+    const currentParams = paramsRef.current;
+    const currentMix    = mixRef.current;
     setTimeout(()=>{
-      const res=runSim(params,numSims);setResults(res);
+      const safeParams={};
+      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(currentParams[k]||{})};});
+      const res=runSim(safeParams,numSims,currentMix);
+      setResults([...res]);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(res.map(r=>r[m]));});
-      const se={};Object.keys(params).filter(k=>k!=="tasa_imp").forEach(k=>{
-        const tw={...params,[k]:{...params[k],mean:params[k].mean*1.10}};
-        const tr=runSim(tw,Math.min(500,numSims));
+      const se={};Object.keys(safeParams).filter(k=>k!=="tasa_imp").forEach(k=>{
+        const tw={...safeParams,[k]:{...safeParams[k],mean:safeParams[k].mean*1.10}};
+        const tr=runSim(tw,Math.min(500,numSims),currentMix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(r=>r[m]))-bv[m];});
       });
       setSensData(se);setRunning(false);setTab("results");
     },50);
-  },[params,numSims]);
+  },[numSims]);
 
   const handleGS=useCallback(()=>{
     setGsRunning(true);
-    origRef.current={};Object.entries(params).forEach(([k,v])=>{origRef.current[k]={...v};});
+    const currentParams = paramsRef.current;
+    const currentMix    = mixRef.current;
+    origRef.current={};Object.entries(currentParams).forEach(([k,v])=>{origRef.current[k]={...v};});
+    origRef.current._mix=currentMix.map(c=>({...c}));
     setTimeout(()=>{
+      const safeParams={};
+      Object.entries(PD).forEach(([k,v])=>{safeParams[k]={...v,...(currentParams[k]||{})};});
       const lk=Object.keys(gsLevers).filter(k=>gsLevers[k]);
-      const r=goalSeek({params,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk});
+      const mixLeverIdxs=currentMix.map((c,i)=>gsMixLevers[c.cat]?i:-1).filter(i=>i>=0);
+      const r=goalSeek({params:safeParams,metric:gsMetric,target:gsTarget,conf:gsConf,levers:lk,mix:currentMix,mixLevers:mixLeverIdxs});
       setGsResult(r);
+      // Apply optimized mix if mix levers were active
+      if(mixLeverIdxs.length>0 && r.mix) syncSetMix(r.mix);
       const optP=r.params;
-      const fr=runSim(optP,numSims);setResults(fr);
+      const fr=runSim(optP,numSims,r.mix||currentMix);setResults(fr);
       const metrics=["eva","ebitda","ebit","utilidadNeta"];
       const bv={};metrics.forEach(m=>{bv[m]=avg(fr.map(x=>x[m]));});
       const se={};Object.keys(optP).filter(k=>k!=="tasa_imp").forEach(k=>{
         const tw={...optP,[k]:{...optP[k],mean:optP[k].mean*1.10}};
-        const tr=runSim(tw,Math.min(500,numSims));
+        const tr=runSim(tw,Math.min(500,numSims),r.mix||currentMix);
         se[k]={};metrics.forEach(m=>{se[k][m]=avg(tr.map(x=>x[m]))-bv[m];});
       });
       setSensData(se);
       setParams(prev=>{const n={...prev};Object.entries(optP).forEach(([k,v])=>{n[k]={...v};});return n;});
       setGsRunning(false);setTab("goalseeking");
     },80);
-  },[params,gsMetric,gsTarget,gsConf,gsLevers,numSims]);
+  },[gsMetric,gsTarget,gsConf,gsLevers,gsMixLevers,numSims]);
 
   const stats=useMemo(()=>{
     if(!results)return null;
     const ex=f=>{const v=results.map(r=>r[f]).sort((a,b)=>a-b);return{values:v,mean:avg(v),p10:pctle(v,10),p50:pctle(v,50),p90:pctle(v,90)};};
     return{
       ebitda:ex("ebitda"),ebit:ex("ebit"),utilidadNeta:ex("utilidadNeta"),eva:ex("eva"),
-      ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),
+      ingTotal:ex("ingTotal"),ingVN:ex("ingVN"),descTotal:ex("descTotal"),ingNeto:ex("ingNeto"),
+      cogs:ex("cogs"),
+      precioListaSim:ex("precioListaSim"),
       margenBruto:ex("margenBruto"),
       gastosComerciales:ex("gastosComerciales"),floorPlan:ex("floorPlan"),gastosAdmin:ex("gastosAdmin"),gastosTotal:ex("gastosTotal"),da:ex("da"),
-      uVN:ex("uVN"),vendProm:ex("vendProm"),costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),
+      downpaymentsCartera:ex("downpaymentsCartera"),capitalNeto:ex("capitalNeto"),
+      uVN:ex("uVN"),vendProm:ex("vendProm"),utilizacion:ex("utilizacion"),prospectosPerdidos:ex("prospectosPerdidos"),
+      costoAdq:ex("costoAdq"),margenPorU:ex("margenPorU"),margenRealPct:ex("margenRealPct"),invPromedio:ex("invPromedio"),
     };
   },[results]);
 
@@ -303,11 +647,23 @@ export default function VNMotosMonteCarlo(){
   const leverChanges=useMemo(()=>{
     if(!gsResult||!origRef.current)return[];
     const ch=[];
+    // PD parameter changes
     Object.keys(gsResult.params).forEach(k=>{
       if(!PD[k]||!origRef.current[k])return;
       const o=origRef.current[k].mean,n=gsResult.params[k].mean,p=((n-o)/o)*100;
       if(Math.abs(p)>0.5)ch.push({k,label:PD[k].label,unit:PD[k].unit,o,n,p});
     });
+    // Mix category changes
+    if(gsResult.mix){
+      gsResult.mix.forEach((c,i)=>{
+        // Always compare against the mix that was live when GS started (origRef._mix),
+        // NOT against MIX_DEFAULT which may differ from what the user had configured.
+        const orig=origRef.current._mix?.[i];
+        if(!orig)return;
+        const o=orig.mix_pct,n=c.mix_pct,p=o>0?((n-o)/o)*100:0;
+        if(Math.abs(p)>0.5)ch.push({k:`mix_${c.cat}`,label:`Mix ${c.cat}`,unit:"%",o,n,p,isMix:true});
+      });
+    }
     ch.sort((a,b)=>Math.abs(b.p)-Math.abs(a.p));return ch;
   },[gsResult]);
 
@@ -316,21 +672,39 @@ export default function VNMotosMonteCarlo(){
     precio:{t:"Precio y Margen",c:C.green,i:"💵"},
     prod:{t:"Productividad Comercial",c:C.blue,i:"👥"},
     mktg:{t:"Marketing y Adquisición",c:C.orange,i:"📣"},
-    inv:{t:"Inventario Motos y Floor Plan",c:C.gold,i:"📦"},
+    inv:{t:"Inventario y Floor Plan",c:C.gold,i:"📦"},
     gastos:{t:"Gastos Fijos y Overhead",c:C.muted,i:"🏢"},
     dya:{t:"Depreciación y Amortización",c:C.purple,i:"📉"},
     eva_p:{t:"Parámetros EVA",c:C.purple,i:"📐"},
   };
 
   const tabs=[{k:"supuestos",l:"📝 Supuestos"},{k:"goalseeking",l:"🎯 Goal-Seek"},{k:"results",l:"📊 Resultados"},{k:"sensitivity",l:"🌪️ Tornado"}];
-  const inpS={padding:"4px 7px",borderRadius:3,border:`1px solid ${C.border}`,fontSize:10,fontFamily:"var(--mono)",background:C.light,textAlign:"right"};
+  const inpS={padding:"4px 7px",borderRadius:3,border:`1px solid ${C.border}`,fontSize:"var(--fs-sm)",fontFamily:"var(--mono)",background:C.light,textAlign:"right"};
 
   return(
     <div style={{"--serif":"'Cormorant Garamond',serif","--sans":"'Outfit',sans-serif","--mono":"'JetBrains Mono',monospace",
       minHeight:"100vh",background:`linear-gradient(170deg,${C.light} 0%,#EDE8E0 100%)`,fontFamily:"var(--sans)",color:C.text}}>
+      <style>{`
+        :root {
+          --fs-xs:   clamp(8px,  1.1vw, 11px);
+          --fs-sm:   clamp(10px, 1.3vw, 13px);
+          --fs-md:   clamp(12px, 1.5vw, 15px);
+          --fs-lg:   clamp(14px, 1.8vw, 18px);
+          --fs-xl:   clamp(16px, 2.2vw, 22px);
+          --fs-2xl:  clamp(20px, 2.8vw, 28px);
+          --inp-w:   clamp(56px, 7vw,  80px);
+          --lbl-w:   clamp(160px, 20vw, 220px);
+          --pad-x:   clamp(8px,  2vw,  24px);
+          --pad-y:   clamp(6px,  1.2vw, 14px);
+          --radius:  clamp(4px,  0.5vw, 8px);
+        }
+        input[type=number] { font-size: var(--fs-sm) !important; }
+        select             { font-size: var(--fs-sm) !important; }
+        button             { font-size: var(--fs-sm) !important; }
+      `}</style>
       <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 
-      <div style={{background:`linear-gradient(135deg,${C.deep} 0%,${C.green} 100%)`,padding:"14px 12px 10px",color:"#fff"}}>
+      <div style={{background:`linear-gradient(135deg,${C.deep} 0%,${C.green} 100%)`,padding:"var(--pad-y) var(--pad-x)",color:"#fff"}}>
         <svg width="150" height="22" viewBox="0 0 858 129" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginBottom:6,display:"block"}}>
           <path d="M118.195 54.8174L99.4083 36.0308L87.6003 48.4433L109.189 48.6508L101.063 60.1719L80.0357 59.9704L76.8303 59.9399L66.4815 59.8422V24.2839L77.453 16.7314V38.3448L89.8777 26.5002L71.1827 7.80524C66.1091 2.73159 57.8911 2.73159 52.8174 7.80524L34.0309 26.5918L46.4433 38.3998L46.6509 16.8108L58.1719 24.9372L57.9704 45.9644L57.9399 49.1698L57.8422 59.5186H22.2839L14.7314 48.547H36.3448L24.5002 36.1224L5.80524 54.8174C0.731587 59.891 0.731587 68.1151 5.80524 73.1826L24.5918 91.9692L36.3998 79.5567L14.8108 79.3492L22.9372 67.8281L43.9645 68.0296L47.1699 68.0601L57.5186 68.1578V103.716L46.5471 111.269V89.6552L34.1225 101.5L52.8174 120.195C57.8911 125.268 66.1091 125.268 71.1827 120.195L89.9692 101.408L77.5568 89.6002L77.3492 111.189L65.8282 103.063L66.0297 82.0356L66.0602 78.8302L66.1579 68.4814H101.716L109.269 79.453H87.6553L99.4999 91.8776L118.195 73.1826C123.269 68.109 123.269 59.891 118.195 54.8174Z" fill="white"/>
           <path d="M173.977 73.19C172.701 73.19 171.425 73.19 170.149 73.19C168.873 73.19 167.738 73.0482 166.604 72.9065V104.098H152V24.2759H175.111C178.939 24.2759 182.342 24.4177 185.178 24.843C188.014 25.2684 190.708 25.6937 192.976 26.4026C198.364 28.1039 202.618 30.7978 205.595 34.3423C208.573 38.0286 209.991 42.7073 209.991 48.3785C209.991 52.2066 209.14 55.7511 207.58 58.7284C206.021 61.8476 203.61 64.3996 200.633 66.5263C197.513 68.653 193.827 70.3544 189.432 71.4887C184.894 72.6229 179.79 73.19 173.977 73.19ZM166.604 60.5716C167.455 60.7134 168.447 60.7134 169.865 60.8551C171.141 60.8551 172.559 60.997 173.835 60.997C177.805 60.997 181.066 60.7134 183.76 60.0045C186.454 59.4374 188.581 58.4449 190.141 57.3106C191.842 56.1764 192.976 54.7586 193.685 53.1991C194.394 51.6395 194.819 49.7963 194.819 47.9532C194.819 45.5429 194.252 43.558 193.26 41.8567C192.126 40.1553 190.282 38.8793 187.588 37.8868C186.171 37.4615 184.469 37.0361 182.484 36.8943C180.499 36.6108 177.947 36.6108 174.969 36.6108H166.746V60.5716H166.604Z" fill="white"/>
@@ -344,19 +718,25 @@ export default function VNMotosMonteCarlo(){
           <path d="M772.6 83.8238H742.541L734.743 104.24H719.146L750.907 24.418H764.235L795.995 104.24H780.54L772.6 83.8238ZM757.429 43.4165C754.593 51.7815 752.183 58.7287 749.914 64.3999L747.22 71.4889H767.921L765.227 64.3999C763.1 58.7287 760.548 51.7815 757.712 43.4165H757.429Z" fill="white"/>
           <path d="M814.569 24.2759V91.905H852.001V104.098H799.965V24.2759H814.569Z" fill="white"/>
         </svg>
-        <div style={{fontFamily:"var(--serif)",fontSize:15,fontWeight:700}}>Simulador Monte Carlo — Venta Motos Nuevas</div>
-        <div style={{fontSize:7,opacity:.7,letterSpacing:1.5,textTransform:"uppercase"}}>Funnel Comercial Motos · Inventario · Goal-Seeking</div>
+        <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-lg)",fontWeight:700}}>Simulador Monte Carlo — Venta Motos Nuevas</div>
+        <div style={{fontSize:"var(--fs-xs)",opacity:.7,letterSpacing:1.5,textTransform:"uppercase"}}>Funnel Comercial · Inventario · Goal-Seeking</div>
       </div>
 
-      <div style={{padding:"8px 8px 36px"}}>
-        <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
-          <button onClick={handleRun} disabled={running} style={{padding:"7px 16px",borderRadius:4,border:"none",cursor:"pointer",background:running?C.muted:`linear-gradient(135deg,${C.green},${C.deep})`,color:"#fff",fontSize:10,fontWeight:600}}>{running?"⏳...":"▶ Simular"}</button>
-          <button onClick={handleGS} disabled={gsRunning} style={{padding:"7px 16px",borderRadius:4,border:"none",cursor:"pointer",background:gsRunning?C.muted:`linear-gradient(135deg,${C.gold},${C.orange})`,color:"#fff",fontSize:10,fontWeight:600}}>{gsRunning?"⏳...":"🎯 Goal-Seek"}</button>
-          <select value={numSims} onChange={e=>setNumSims(+e.target.value)} style={{...inpS,width:55,fontSize:9}}>{[1000,3000,5000].map(n=><option key={n} value={n}>{n}</option>)}</select>
+      <div style={{padding:"var(--pad-y) var(--pad-x) 36px",maxWidth:960,margin:"0 auto"}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+          <button onClick={handleRun} disabled={running} style={{padding:"8px 18px",borderRadius:4,border:"none",cursor:"pointer",background:running?C.muted:`linear-gradient(135deg,${C.green},${C.deep})`,color:"#fff",fontSize:"var(--fs-sm)",fontWeight:600}}>{running?"⏳...":"▶ Simular"}</button>
+          <button onClick={handleGS} disabled={gsRunning} style={{padding:"8px 18px",borderRadius:4,border:"none",cursor:"pointer",background:gsRunning?C.muted:`linear-gradient(135deg,${C.gold},${C.orange})`,color:"#fff",fontSize:"var(--fs-sm)",fontWeight:600}}>{gsRunning?"⏳...":"🎯 Goal-Seek"}</button>
+          <select value={numSims} onChange={e=>setNumSims(+e.target.value)} style={{...inpS,width:70}}>{[1000,3000,5000].map(n=><option key={n} value={n}>{n}</option>)}</select>
+          <button onClick={()=>{
+            setParams(p=>{const n={};Object.entries(p).forEach(([k,v])=>{n[k]={...v,std:0};});paramsRef.current=n;return n;});
+            syncSetMix(prev=>prev.map(c=>({...c,mix_std:0,desc_std:0})));
+          }} style={{padding:"8px 12px",borderRadius:4,border:`1px solid ${C.border}`,cursor:"pointer",background:C.light,color:C.muted,fontSize:"var(--fs-sm)",fontWeight:500}} title="Pone todas las desviaciones estándar en 0 — modo determinístico para validar fórmulas">
+            σ = 0
+          </button>
         </div>
 
         <div style={{display:"flex",gap:0,marginBottom:8}}>
-          {tabs.map((t,i)=>(<button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,padding:"6px 2px",fontSize:8.5,fontWeight:tab===t.k?600:400,background:tab===t.k?C.card:"transparent",color:tab===t.k?C.deep:C.muted,border:`1px solid ${C.border}`,borderBottom:tab===t.k?`2px solid ${C.gold}`:`1px solid ${C.border}`,borderRadius:i===0?"5px 0 0 0":i===tabs.length-1?"0 5px 0 0":0,cursor:"pointer"}}>{t.l}</button>))}
+          {tabs.map((t,i)=>(<button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,padding:"8px 2px",fontSize:"var(--fs-xs)",fontWeight:tab===t.k?600:400,background:tab===t.k?C.card:"transparent",color:tab===t.k?C.deep:C.muted,border:`1px solid ${C.border}`,borderBottom:tab===t.k?`2px solid ${C.gold}`:`1px solid ${C.border}`,borderRadius:i===0?"5px 0 0 0":i===tabs.length-1?"0 5px 0 0":0,cursor:"pointer"}}>{t.l}</button>))}
         </div>
 
         {/* ═══ SUPUESTOS ═══ */}
@@ -366,6 +746,73 @@ export default function VNMotosMonteCarlo(){
             if(!keys.length)return null;
             return(<Section key={gk} title={gc.t} icon={gc.i} color={gc.c} defaultOpen={["funnel","precio","prod"].includes(gk)}>
               {keys.map(k=><PI key={k} k={k} p={PD[k]} val={params[k]} onChange={chg} hl={gsLevers[k]}/>)}
+              {gk==="prod"&&(()=>{
+                const demanda = Math.round((params.leads_mes?.mean||400) * (params.tasa_conversion?.mean||11)/100 * (1 - (params.devoluciones?.mean||8)/100));
+                const capacidad = Math.round((params.vendedores_fte?.mean||8) * (params.productividad?.mean||8));
+                const cuello = demanda > capacidad;
+                const utilizacion = capacidad > 0 ? Math.min(100, (demanda/capacidad)*100) : 0;
+                return(
+                  <div style={{marginTop:6,padding:"7px 10px",borderRadius:4,
+                    background:cuello?`${C.red}12`:`${C.green}12`,
+                    border:`1px solid ${cuello?C.red:C.green}40`}}>
+                    <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:4}}>
+                      {[
+                        {l:"Demanda potencial/mes",   v:demanda,    u:"u"},
+                        {l:"Capacidad máx/mes",       v:capacidad,  u:"u"},
+                        {l:"Utilización F.V.",        v:utilizacion.toFixed(0), u:"%"},
+                      ].map(x=>(
+                        <div key={x.l}>
+                          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>{x.l}</div>
+                          <div style={{fontSize:"var(--fs-sm)",fontWeight:700,fontFamily:"var(--mono)",
+                            color:x.u==="%"?(utilizacion>=90?C.red:utilizacion>=70?C.gold:C.green):C.deep}}>
+                            {x.v}{x.u}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontSize:"var(--fs-xs)",color:cuello?C.red:C.green,fontWeight:600}}>
+                      {cuello
+                        ? `⚠ Cuello de botella: se pierden ~${demanda-capacidad} prospectos/mes por falta de capacidad`
+                        : `✓ Capacidad suficiente — ${(capacidad-demanda)} unidades de holgura/mes`}
+                    </div>
+                  </div>
+                );
+              })()}
+              {gk==="precio"&&(
+                <>
+                  <MixTable mix={mix} setMix={syncSetMix}/>
+                  {(()=>{
+                    const mb=params.margen_bruto_pct?.mean||0;
+                    const descGlobal=params.descuento_pct?.mean||0;
+                    const descMix=descuentoMixMedio(mix);
+                    const descEfectivo=Math.max(descGlobal,descMix);
+                    const real=mb-descEfectivo;
+                    return(
+                      <div style={{marginTop:6,padding:"7px 10px",borderRadius:4,
+                        background:real<0?"#B3404020":real<3?"#D4772C20":"#1A5C3820",
+                        border:`1px solid ${real<0?C.red:real<3?C.orange:C.green}50`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)"}}>
+                            Margen bruto = {mb.toFixed(1)}%
+                          </span>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.muted}}>−</span>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.orange,fontFamily:"var(--mono)"}}>
+                            {descEfectivo.toFixed(2)}% desc. efectivo
+                          </span>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.muted}}>=</span>
+                          <span style={{fontSize:"var(--fs-sm)",fontWeight:700,fontFamily:"var(--mono)",
+                            color:real<0?C.red:real<3?C.orange:C.green}}>
+                            {real.toFixed(2)}% {real<0?"⚠ VENTA BAJO COSTO":real<3?"⚠ margen ajustado":"✓ margen OK"}
+                          </span>
+                        </div>
+                        <div style={{fontSize:"var(--fs-xs)",color:C.muted,marginTop:3,fontFamily:"var(--mono)"}}>
+                          Desc. global param: {descGlobal.toFixed(1)}% · Desc. ponderado mix: {descMix.toFixed(2)}% · Efectivo: max({descGlobal.toFixed(1)}%, {descMix.toFixed(2)}%) = {descEfectivo.toFixed(2)}%
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
             </Section>);
           })}
         </div>)}
@@ -373,44 +820,64 @@ export default function VNMotosMonteCarlo(){
         {/* ═══ GOAL-SEEKING ═══ */}
         {tab==="goalseeking"&&(<div>
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`,marginBottom:8,borderTop:`3px solid ${C.gold}`}}>
-            <div style={{fontFamily:"var(--serif)",fontSize:13,fontWeight:700,color:C.deep,marginBottom:6}}>🎯 Meta de Ventas Motos</div>
+            <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:6}}>🎯 Meta de Ventas</div>
             <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap",alignItems:"flex-end"}}>
               <div>
-                <div style={{fontSize:7,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Métrica</div>
+                <div style={{fontSize:"var(--fs-xs)",color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Métrica</div>
                 <select value={gsMetric} onChange={e=>setGsMetric(e.target.value)} style={{...inpS,width:100}}>
                   <option value="eva">EVA</option><option value="ebitda">EBITDA</option><option value="ebit">EBIT</option><option value="utilidadNeta">Ut. Neta</option>
                 </select>
               </div>
               <div>
-                <div style={{fontSize:7,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Meta USD/año</div>
+                <div style={{fontSize:"var(--fs-xs)",color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Meta USD/año</div>
                 <input type="number" value={gsTarget} onChange={e=>setGsTarget(parseFloat(e.target.value)||0)} style={{...inpS,width:95}}/>
               </div>
               <div>
-                <div style={{fontSize:7,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Confianza</div>
+                <div style={{fontSize:"var(--fs-xs)",color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:1}}>Confianza</div>
                 <select value={gsConf} onChange={e=>setGsConf(+e.target.value)} style={{...inpS,width:55}}>{[50,60,70,80,90].map(n=><option key={n} value={n}>{n}%</option>)}</select>
               </div>
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:C.deep,marginBottom:4}}>Palancas</div>
+            <div style={{fontSize:"var(--fs-sm)",fontWeight:600,color:C.deep,marginBottom:4}}>Palancas</div>
             {Object.entries(GC).filter(([gk])=>Object.keys(PD).some(k=>PD[k].group===gk&&PD[k].lever)).map(([gk,gc])=>{
               const keys=Object.entries(PD).filter(([,v])=>v.group===gk&&v.lever).map(([k])=>k);
               if(!keys.length)return null;
               return(<div key={gk} style={{marginBottom:3}}>
-                <div style={{fontSize:7,fontWeight:600,color:gc.c}}>{gc.i} {gc.t}</div>
+                <div style={{fontSize:"var(--fs-xs)",fontWeight:600,color:gc.c}}>{gc.i} {gc.t}</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:2}}>
-                  {keys.map(k=>(<button key={k} onClick={()=>setGsLevers(p=>({...p,[k]:!p[k]}))} style={{padding:"2px 5px",borderRadius:3,fontSize:7.5,fontFamily:"var(--mono)",border:`1px solid ${gsLevers[k]?C.gold:C.border}`,cursor:"pointer",background:gsLevers[k]?`${C.gold}20`:"transparent",color:gsLevers[k]?C.deep:C.muted}}>{PD[k].label}</button>))}
+                  {keys.map(k=>(<button key={k} onClick={()=>setGsLevers(p=>({...p,[k]:!p[k]}))} style={{padding:"2px 5px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",border:`1px solid ${gsLevers[k]?C.gold:C.border}`,cursor:"pointer",background:gsLevers[k]?`${C.gold}20`:"transparent",color:gsLevers[k]?C.deep:C.muted}}>
+                    {PD[k].dir===1?"↑ ":PD[k].dir===-1?"↓ ":""}{PD[k].label}
+                  </button>))}
                 </div>
               </div>);
             })}
+            {/* Mix de categorías como palancas */}
+            <div style={{marginBottom:3}}>
+              <div style={{fontSize:"var(--fs-xs)",fontWeight:600,color:C.green}}>🚗 Mix de Categorías (% participación)</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:2,marginTop:2}}>
+                {mix.map(c=>(
+                  <button key={c.cat} onClick={()=>setGsMixLevers(p=>({...p,[c.cat]:!p[c.cat]}))}
+                    style={{padding:"2px 5px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",
+                      border:`1px solid ${gsMixLevers[c.cat]?C.green:C.border}`,cursor:"pointer",
+                      background:gsMixLevers[c.cat]?`${C.green}20`:"transparent",
+                      color:gsMixLevers[c.cat]?C.deep:C.muted}}>
+                    {c.cat} ({c.mix_pct.toFixed(0)}%)
+                  </button>
+                ))}
+              </div>
+              <div style={{fontSize:"var(--fs-xs)",color:C.muted,marginTop:3}}>
+                El algoritmo ajustará el % de estas categorías para maximizar el precio ponderado hacia la meta.
+              </div>
+            </div>
           </div>
           {gsResult&&(
             <div style={{background:C.card,borderRadius:6,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
               <div style={{padding:"10px 12px",background:gsResult.ok?`linear-gradient(135deg,${C.green},${C.deep})`:`linear-gradient(135deg,${C.orange},${C.red})`,color:"#fff"}}>
-                <div style={{fontSize:12,fontWeight:700}}>{gsResult.ok?"✅ Meta Alcanzable":"⚠️ Meta Difícil"}</div>
-                <div style={{fontSize:10,fontFamily:"var(--mono)",opacity:.9,marginTop:2}}>{gsMetric.toUpperCase()} objetivo: ${fmtF(gsTarget)} → Logrado: ${fmtF(Math.round(gsResult.final))} ({gsConf}% confianza)</div>
+                <div style={{fontSize:"var(--fs-md)",fontWeight:700}}>{gsResult.ok?"✅ Meta Alcanzable":"⚠️ Meta Difícil"}</div>
+                <div style={{fontSize:"var(--fs-sm)",fontFamily:"var(--mono)",opacity:.9,marginTop:2}}>{gsMetric.toUpperCase()} objetivo: ${fmtF(gsTarget)} → Logrado: ${fmtF(Math.round(gsResult.final))} ({gsConf}% confianza)</div>
               </div>
               <div style={{padding:"10px"}}>
-                <div style={{fontFamily:"var(--serif)",fontSize:14,fontWeight:700,color:C.deep,marginBottom:6}}>Objetivos KPI</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 65px 65px 50px",gap:2,padding:"5px 6px",background:C.deep,borderRadius:"4px 4px 0 0",color:"#fff",fontFamily:"var(--mono)",fontSize:8,fontWeight:600}}>
+                <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-lg)",fontWeight:700,color:C.deep,marginBottom:6}}>Objetivos KPI</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 65px 65px 50px",gap:2,padding:"5px 6px",background:C.deep,borderRadius:"4px 4px 0 0",color:"#fff",fontFamily:"var(--mono)",fontSize:"var(--fs-xs)",fontWeight:600}}>
                   <div>KPI</div><div style={{textAlign:"center"}}>ACTUAL</div><div style={{textAlign:"center"}}>OBJETIVO</div><div style={{textAlign:"center"}}>DELTA</div>
                 </div>
                 {leverChanges.map((ch,idx)=>{
@@ -418,10 +885,10 @@ export default function VNMotosMonteCarlo(){
                   const fmtVal=(v,u)=>{if(u==="%")return v.toFixed(1)+"%";if(u==="$")return"$"+fmtF(Math.round(v));return Math.round(v)+(u?" "+u:"");};
                   return(
                     <div key={ch.k} style={{display:"grid",gridTemplateColumns:"1fr 65px 65px 50px",gap:2,padding:"6px",alignItems:"center",background:idx%2===0?C.light:C.card,borderBottom:`1px solid ${C.border}`}}>
-                      <div style={{fontSize:9.5,fontWeight:500}}>{ch.label}</div>
-                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:10,color:C.muted}}>{fmtVal(ch.o,ch.unit)}</div>
-                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:11,fontWeight:700,color:good?C.green:C.orange,background:good?`${C.green}12`:`${C.orange}12`,borderRadius:3,padding:"2px 4px"}}>{fmtVal(ch.n,ch.unit)}</div>
-                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:9,fontWeight:600,color:good?C.green:C.orange}}>{up?"▲":"▼"} {Math.abs(ch.p).toFixed(1)}%</div>
+                      <div style={{fontSize:"var(--fs-sm)",fontWeight:500}}>{ch.label}</div>
+                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:"var(--fs-sm)",color:C.muted}}>{fmtVal(ch.o,ch.unit)}</div>
+                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:"var(--fs-sm)",fontWeight:700,color:good?C.green:C.orange,background:good?`${C.green}12`:`${C.orange}12`,borderRadius:3,padding:"2px 4px"}}>{fmtVal(ch.n,ch.unit)}</div>
+                      <div style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:"var(--fs-xs)",fontWeight:600,color:good?C.green:C.orange}}>{up?"▲":"▼"} {Math.abs(ch.p).toFixed(1)}%</div>
                     </div>);
                 })}
               </div>
@@ -432,8 +899,8 @@ export default function VNMotosMonteCarlo(){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:6}}>
                 {[{l:"EBITDA",s:stats.ebitda,c:C.green},{l:"EVA",s:stats.eva,c:stats.eva.p50>=0?C.gold:C.red},{l:"UNID/AÑO",s:stats.uVN,c:C.blue,noD:true},{l:"COSTO ADQ/U",s:stats.costoAdq,c:C.orange}].map(x=>(
                   <div key={x.l} style={{background:C.light,borderRadius:4,padding:"5px 7px",borderLeft:`3px solid ${x.c}`}}>
-                    <div style={{fontSize:7,textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
-                    <div style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:500,color:x.c}}>{x.noD?Math.round(x.s.p50).toLocaleString():"$"+fmt(x.s.p50)}</div>
+                    <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
+                    <div style={{fontFamily:"var(--mono)",fontSize:"var(--fs-md)",fontWeight:500,color:x.c}}>{x.noD?Math.round(x.s.p50).toLocaleString():"$"+fmt(x.s.p50)}</div>
                   </div>
                 ))}
               </div>
@@ -448,48 +915,56 @@ export default function VNMotosMonteCarlo(){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:6}}>
             {[{l:"EBITDA",s:stats.ebitda,c:C.green},{l:"EBIT",s:stats.ebit,c:C.blue},{l:"UT.NETA",s:stats.utilidadNeta,c:C.deep},{l:"EVA",s:stats.eva,c:stats.eva.p50>=0?C.gold:C.red}].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:5,padding:"7px",border:`1px solid ${C.border}`,borderLeft:`3px solid ${x.c}`}}>
-                <div style={{fontSize:7,textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
-                <div style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:500,color:x.c}}>${fmt(x.s.p50)}</div>
-                <div style={{fontSize:7,fontFamily:"var(--mono)",color:C.muted}}>P10 ${fmt(x.s.p10)} · P90 ${fmt(x.s.p90)}</div>
+                <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1.5,color:C.muted}}>{x.l}</div>
+                <div style={{fontFamily:"var(--mono)",fontSize:"var(--fs-lg)",fontWeight:500,color:x.c}}>${fmt(x.s.p50)}</div>
+                <div style={{fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.muted}}>P10 ${fmt(x.s.p10)} · P90 ${fmt(x.s.p90)}</div>
               </div>
             ))}
           </div>
 
           {/* Operational KPIs */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:6}}>
             {[
-              {l:"UNIDADES/AÑO",v:Math.round(stats.uVN.p50).toLocaleString(),c:C.green},
-              {l:"VENDEDORES",v:stats.vendProm.p50.toFixed(1),c:C.blue},
-              
-              {l:"COSTO ADQ/U",v:"$"+fmt(stats.costoAdq.p50),c:C.orange},
+              {l:"UNIDADES/AÑO",      v:Math.round(stats.uVN.p50).toLocaleString(),                        c:C.green},
+              {l:"PRECIO POND. P50",  v:"$"+fmt(stats.precioListaSim?.p50||precioListaMedio(mix)),         c:C.deep},
+              {l:"MARGEN REAL %",     v:(stats.margenRealPct?.p50||0).toFixed(1)+"%",                      c:stats.margenRealPct?.p50>=0?C.green:C.red},
+              {l:"UTILIZACIÓN F.V.",  v:((stats.utilizacion?.p50||0)*100).toFixed(1)+"%",                  c:(stats.utilizacion?.p50||0)>=0.9?C.red:(stats.utilizacion?.p50||0)>=0.7?C.gold:C.green},
+              {l:"PROSP. PERDIDOS/M", v:Math.round(stats.prospectosPerdidos?.p50||0).toLocaleString(),     c:(stats.prospectosPerdidos?.p50||0)>0?C.red:C.green},
+              {l:"INV. PROM/MES",     v:Math.round(stats.invPromedio.p50).toLocaleString()+"u",            c:C.gold},
+              {l:"COSTO ADQ/U",       v:"$"+fmt(stats.costoAdq.p50),                                      c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,borderRadius:4,padding:"5px 6px",border:`1px solid ${C.border}`,borderTop:`2px solid ${x.c}`}}>
-                <div style={{fontSize:6,textTransform:"uppercase",letterSpacing:1,color:C.muted}}>{x.l}</div>
-                <div style={{fontFamily:"var(--mono)",fontSize:12,fontWeight:500,color:x.c}}>{x.v}</div>
+                <div style={{fontSize:"var(--fs-xs)",textTransform:"uppercase",letterSpacing:1,color:C.muted}}>{x.l}</div>
+                <div style={{fontFamily:"var(--mono)",fontSize:"var(--fs-md)",fontWeight:500,color:x.c}}>{x.v}</div>
               </div>
             ))}
           </div>
 
           {/* P&L */}
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`,marginBottom:6}}>
-            <div style={{fontFamily:"var(--serif)",fontSize:12,fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN Motos — Mediana Anual</div>
+            <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:4}}>P&L VN — Mediana Anual</div>
             {[
-              {l:"INGRESOS VN",v:stats.ingTotal.p50,b:1,c:C.deep},
-              {l:"  Venta vehículos",v:stats.ingVN.p50,c:C.green},
-              {l:"MARGEN BRUTO",v:stats.margenBruto.p50,b:1,c:C.green,t:1},
-              {l:"(-) GASTOS COMERCIALES",v:-stats.gastosComerciales.p50,b:1,c:C.red,t:1},
-              {l:"(-) FLOOR PLAN",v:-stats.floorPlan.p50,c:C.orange},
-              {l:"(-) GASTOS ADMIN/G&A",v:-stats.gastosAdmin.p50,c:C.red},
-              {l:"= EBITDA",v:stats.ebitda.p50,b:1,c:C.green,t:1},
-              {l:"(-) D&A",v:-stats.da.p50,c:C.muted},
-              {l:"= EBIT",v:stats.ebit.p50,b:1,c:C.blue,t:1},
-              {l:"(-) IR 32%",v:stats.ebit.p50>0?-stats.ebit.p50*0.32:0,c:C.muted},
-              {l:"= UTILIDAD NETA",v:stats.utilidadNeta.p50,b:1,c:C.deep,t:1},
-              {l:"(-) Cargo capital",v:-(params.capital_vn.mean*params.wacc.mean/100),c:C.red},
-              {l:"= EVA",v:stats.eva.p50,b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
+              {l:"INGRESOS BRUTOS",             v:stats.ingVN.p50,                                    b:1,c:C.deep},
+              {l:"  Precio lista × unidades",   v:stats.ingVN.p50,                                    c:C.muted, indent:true},
+              {l:"(-) Descuentos",              v:stats.descTotal?-stats.descTotal.p50:0,              c:C.red},
+              {l:"= INGRESOS NETOS",            v:stats.ingTotal.p50,                                 b:1,c:C.deep,t:1},
+              {l:"(-) COGS",                    v:-(stats.cogs?.p50||0),                              c:C.muted},
+              {l:"= MARGEN BRUTO",              v:stats.margenBruto.p50,                              b:1,c:C.green,t:1},
+              {l:"(-) GASTOS COMERCIALES",      v:-stats.gastosComerciales.p50,                       b:1,c:C.red,t:1},
+              {l:"(-) GASTOS ADMIN/G&A",        v:-stats.gastosAdmin.p50,                             c:C.red},
+              {l:"= EBITDA",                    v:stats.ebitda.p50,                                   b:1,c:C.green,t:1},
+              {l:"(-) D&A",                     v:-stats.da.p50,                                      c:C.muted},
+              {l:"= EBIT",                      v:stats.ebit.p50,                                     b:1,c:C.blue,t:1},
+              {l:`(-) IR ${params.tasa_imp.mean}%`, v:stats.ebit.p50>0?-stats.ebit.p50*(params.tasa_imp.mean/100):0, c:C.muted},
+              {l:"(-) Floor Plan (costo financiero inventario)", v:-stats.floorPlan.p50,              c:C.orange},
+              {l:"= UTILIDAD NETA",             v:stats.utilidadNeta.p50,                             b:1,c:C.deep,t:1},
+              {l:"(-) Cargo capital (Capital × WACC)", v:-(stats.capitalNeto?.p50||0)*(params.wacc.mean/100), c:C.red},
+              {l:"(+) Downpayments en cartera", v:stats.downpaymentsCartera?.p50||0,                  c:C.teal},
+              {l:"  Capital neto (base WACC)",  v:stats.capitalNeto?.p50||0,                          c:C.muted,indent:true},
+              {l:"= EVA  [NOPAT − Capital×WACC]",v:stats.eva.p50,                                    b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
             ].map((r,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:8.5,fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none"}}>
-                <span>{r.l}</span><span style={{color:r.c}}>${fmtF(Math.round(r.v))}</span>
+              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:r.indent?"var(--fs-xs)":"var(--fs-sm)",fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none",marginLeft:r.indent?12:0,opacity:r.indent?0.75:1}}>
+                <span style={{color:r.indent?C.muted:C.text}}>{r.l}</span><span style={{color:r.c}}>${fmtF(Math.round(r.v))}</span>
               </div>
             ))}
           </div>
@@ -497,20 +972,20 @@ export default function VNMotosMonteCarlo(){
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`}}>
             <Histo values={stats.ebitda.values} color={C.green} label="EBITDA"/>
             <Histo values={stats.eva.values} color={C.gold} label="EVA"/>
-            <Histo values={stats.uVN.values} color={C.blue} label="Unidades motos / año"/>
+            <Histo values={stats.uVN.values} color={C.blue} label="Unidades VN / año"/>
           </div>
         </div>)}
         {tab==="results"&&!stats&&(
-          <div style={{background:C.card,borderRadius:6,padding:"24px 12px",textAlign:"center",border:`1px solid ${C.border}`,color:C.muted,fontSize:11}}>Presiona ▶ Simular o 🎯 Goal-Seek.</div>
+          <div style={{background:C.card,borderRadius:6,padding:"24px 12px",textAlign:"center",border:`1px solid ${C.border}`,color:C.muted,fontSize:"var(--fs-sm)"}}>Presiona ▶ Simular o 🎯 Goal-Seek.</div>
         )}
 
         {/* ═══ TORNADO ═══ */}
         {tab==="sensitivity"&&(
           <div style={{background:C.card,borderRadius:6,padding:10,border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"var(--serif)",fontSize:12,fontWeight:700,color:C.deep,marginBottom:4}}>Tornado — Sensibilidad +10%</div>
+            <div style={{fontFamily:"var(--serif)",fontSize:"var(--fs-md)",fontWeight:700,color:C.deep,marginBottom:4}}>Tornado — Sensibilidad +10%</div>
             <div style={{display:"flex",gap:3,marginBottom:8,flexWrap:"wrap"}}>
               {["eva","ebitda","ebit","utilidadNeta"].map(t=>(
-                <button key={t} onClick={()=>setSensTarget(t)} style={{padding:"2px 7px",borderRadius:3,fontSize:8,fontFamily:"var(--mono)",border:`1px solid ${sensTarget===t?C.gold:C.border}`,background:sensTarget===t?`${C.gold}20`:"transparent",color:sensTarget===t?C.deep:C.muted,cursor:"pointer"}}>{t==="utilidadNeta"?"Ut.Neta":t.toUpperCase()}</button>
+                <button key={t} onClick={()=>setSensTarget(t)} style={{padding:"2px 7px",borderRadius:3,fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",border:`1px solid ${sensTarget===t?C.gold:C.border}`,background:sensTarget===t?`${C.gold}20`:"transparent",color:sensTarget===t?C.deep:C.muted,cursor:"pointer"}}>{t==="utilidadNeta"?"Ut.Neta":t.toUpperCase()}</button>
               ))}
             </div>
             {sortedSens.length>0?sortedSens.map(([k,val])=>{
@@ -518,20 +993,21 @@ export default function VNMotosMonteCarlo(){
               const pw=Math.abs(val)/mx*100;const ps=val>=0;
               return(
                 <div key={k} style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
-                  <div style={{width:155,fontSize:8,fontFamily:"var(--mono)",color:C.text,textAlign:"right",flexShrink:0,lineHeight:1.1}}>{params[k]?.label||k}</div>
+                  <div style={{width:"clamp(120px,18vw,180px)",fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:C.text,textAlign:"right",flexShrink:0,lineHeight:1.1}}>{params[k]?.label||k}</div>
                   <div style={{flex:1,height:10,background:"#F0ECE6",borderRadius:2,position:"relative"}}>
                     <div style={{position:"absolute",left:ps?"50%":`${50-pw/2}%`,width:`${pw/2}%`,height:"100%",background:ps?C.green:C.red,borderRadius:2,opacity:.6}}/>
                     <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:C.muted,opacity:.25}}/>
                   </div>
-                  <div style={{width:48,fontSize:8,fontFamily:"var(--mono)",color:ps?C.green:C.red,flexShrink:0}}>{ps?"+":""}{fmt(val)}</div>
+                  <div style={{width:"clamp(40px,6vw,60px)",fontSize:"var(--fs-xs)",fontFamily:"var(--mono)",color:ps?C.green:C.red,flexShrink:0}}>{ps?"+":""}{fmt(val)}</div>
                 </div>);
             }):(
-              <div style={{textAlign:"center",padding:14,fontSize:10,color:C.muted}}>Ejecuta simulación primero.</div>
+              <div style={{textAlign:"center",padding:14,fontSize:"var(--fs-sm)",color:C.muted}}>Ejecuta simulación primero.</div>
             )}
           </div>
         )}
 
-        <div style={{marginTop:12,textAlign:"center",fontSize:7,color:C.muted}}>© Promundial Consulting Group · Monte Carlo VN Motos · Nicaragua IR 32%</div>
+
+        <div style={{marginTop:12,textAlign:"center",fontSize:"var(--fs-xs)",color:C.muted}}>© Promundial Consulting Group · Monte Carlo VN Motos · EVA = NOPAT − Capital×WACC</div>
       </div>
     </div>
   );
