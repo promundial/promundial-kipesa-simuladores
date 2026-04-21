@@ -18,7 +18,7 @@ const PD = {
   // ║  FUNNEL COMERCIAL                                        ║
   // ╚═══════════════════════════════════════════════════════════╝
   leads_mes:            {mean:400,std:60,min:100,max:50000,label:"Leads / mes",unit:"u",group:"funnel",lever:true,dir:1},
-  tasa_conversion:      {mean:11,std:2,min:4,max:25,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true,dir:1},
+  tasa_conversion:      {mean:11,std:2,min:4,max:50,label:"Tasa de conversión %",unit:"%",group:"funnel",lever:true,dir:1},
   devoluciones:         {mean:8,std:3,min:0,max:25,label:"% de devoluciones",unit:"%",group:"funnel",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
@@ -26,7 +26,7 @@ const PD = {
   // ╚═══════════════════════════════════════════════════════════╝
   // precio_lista es calculado automáticamente desde el mix de categorías
   descuento_pct:        {mean:3,std:0.5,min:0,max:15,label:"% Descuento sobre precio de lista",unit:"%",group:"precio",lever:true,dir:-1},
-  margen_bruto_pct:     {mean:8,std:1.5,min:3,max:15,label:"Margen bruto %",unit:"%",group:"precio",lever:true},
+  margen_bruto_pct:     {mean:8,std:1.5,min:3,max:35,label:"Margen bruto %",unit:"%",group:"precio",lever:true},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  PRODUCTIVIDAD COMERCIAL                                 ║
@@ -58,23 +58,23 @@ const PD = {
   sueldo_admin:         {mean:1000,std:150,min:0,max:20000,label:"Sueldo admin VN / mes",unit:"$",group:"gastos",lever:false},
   alquiler_showroom:    {mean:8000,std:1500,min:0,max:200000,label:"Alquiler showroom / mes",unit:"$",group:"gastos",lever:true,dir:-1},
   servicios_mes:        {mean:2500,std:500,min:0,max:50000,label:"Servicios básicos / mes",unit:"$",group:"gastos",lever:true,dir:-1},
-  otros_gastos:         {mean:4000,std:800,min:0,max:100000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:true,dir:-1},
+  otros_gastos:         {mean:4000,std:800,min:0,max:2000000,label:"Otros gastos generales / mes",unit:"$",group:"gastos",lever:true,dir:-1},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  DEPRECIACIÓN Y AMORTIZACIÓN                             ║
   // ╚═══════════════════════════════════════════════════════════╝
   deprec_showroom:      {mean:3000,std:400,min:0,max:100000,label:"Depreciación showroom / mes",unit:"$",group:"dya",lever:false},
   deprec_vehiculos:     {mean:2000,std:300,min:0,max:50000,label:"Depreciación demos / utilitarios",unit:"$",group:"dya",lever:false},
-  amort_software:       {mean:800,std:200,min:0,max:20000,label:"Amortización CRM/DMS / mes",unit:"$",group:"dya",lever:false},
+  amort_software:       {mean:800,std:200,min:0,max:500000,label:"Amortización CRM/DMS / mes",unit:"$",group:"dya",lever:false},
 
   // ╔═══════════════════════════════════════════════════════════╗
   // ║  EVA                                                     ║
   // ╚═══════════════════════════════════════════════════════════╝
-  tasa_imp:             {mean:32,std:0,min:32,max:32,label:"Tasa impositiva % (IR 32%)",unit:"%",group:"eva_p",lever:false},
-  capital_vn:           {mean:1800000,std:200000,min:0,max:100000000,label:"Capital invertido VN",unit:"$",group:"eva_p",lever:false},
+  tasa_imp:             {mean:32,std:0,min:28,max:35,label:"Tasa impositiva % (IR)",unit:"%",group:"eva_p",lever:false},
+  capital_vn:           {mean:1800000,std:200000,min:0,max:300000000,label:"Capital invertido VN",unit:"$",group:"eva_p",lever:false},
   wacc:                 {mean:14,std:1.5,min:0,max:50,label:"WACC %",unit:"%",group:"eva_p",lever:false},
   downpayment_pct:      {mean:10,std:2,min:0,max:50,label:"Downpayment % del precio de lista",unit:"%",group:"eva_p",lever:true,dir:1},
-  dias_entrega:         {mean:15,std:5,min:1,max:90,label:"Días promedio reserva → entrega",unit:"d",group:"eva_p",lever:false,dir:-1},
+  dias_entrega:         {mean:15,std:5,min:1,max:360,label:"Días promedio reserva → entrega",unit:"d",group:"eva_p",lever:false,dir:-1},
 };
 
 // ── Mix de categorías de vehículos ──────────────────────────────────────
@@ -217,24 +217,28 @@ function simOnce(P, mix){
   const ingTotal=tIngVN;
   const margenBruto=tIngVN-tCOGS;
   const gastosComerciales=tGVend+tGMktg+tGLeads;
-  const gastosTotal=gastosComerciales+tFP+tGAdmin;
-  const ebitda=margenBruto-gastosTotal;
+  // Floor plan excluido del EBITDA y EBIT — es costo financiero, no operativo
+  const gastosOperativos=gastosComerciales+tGAdmin;
+  const ebitda=margenBruto-gastosOperativos;
   const ebit=ebitda-tDA;
-  const tx=P.tasa_imp.mean/100;
-  const un=ebit>0?ebit*(1-tx):ebit;
+  const tx=S(P.tasa_imp)/100;
+  // Utilidad neta: EBIT - IR - Floor Plan (costo financiero de inventario)
+  const ebitMenosIR=ebit>0?ebit*(1-tx):ebit;
+  const un=ebitMenosIR-tFP;
   const cap=S(P.capital_vn),wacc=S(P.wacc)/100;
 
+  // EVA = NOPAT - (Capital Invertido × WACC)
+  // NOPAT = EBIT × (1 - tasa_imp)  — rendimiento operativo después de impuestos, sin costo financiero
+  const nopat = ebit > 0 ? ebit * (1 - tx) : ebit;
   // Downpayments en cartera reducen el capital invertido neto del dealer.
-  // El banco sigue cobrando floorplan completo — esto solo afecta el cargo de capital (EVA).
-  // unidades_con_reserva = unidades vendidas/mes × (días entrega / 30)
-  // downpayments_en_cartera = unidades_con_reserva × precio_lista_prom × downpayment%
   const uVNMes = tUVN / 12;
   const precioListaProm = tMeses > 0 ? tPrecioListaSum / tMeses : 0;
   const unidadesConReserva = uVNMes * (S(P.dias_entrega) / 30);
   const downpaymentsCartera = unidadesConReserva * precioListaProm * S(P.downpayment_pct) / 100;
   const capitalNeto = Math.max(0, cap - downpaymentsCartera);
 
-  const eva = un - capitalNeto * wacc / 12;
+  // EVA = EBIT×(1−IR) − Capital Invertido×WACC  (cargo anual completo, no /12)
+  const eva = nopat - capitalNeto * wacc;
 
   // Derived KPIs
   const costoAdq=tUVN>0?((tGMktg+tGLeads)/tUVN):0;
@@ -248,8 +252,8 @@ function simOnce(P, mix){
     ingTotal,ingVN:tIngLista,descTotal:tDescuento,ingNeto:tIngVN,
     precioListaSim: tMeses>0 ? tPrecioListaSum/tMeses : 0,
     margenBruto,cogs:tCOGS,
-    gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal,da:tDA,
-    ebitda,ebit,utilidadNeta:un,eva,
+    gastosComerciales,floorPlan:tFP,gastosAdmin:tGAdmin,gastosTotal:gastosOperativos,da:tDA,
+    ebitda,ebit,nopat,utilidadNeta:un,eva,
     downpaymentsCartera,capitalNeto,
     uVN:tUVN,vendProm:tVend/12,utilizacion:tUtilizacion/12,prospectosPerdidos:tProstPerd/12,
     costoAdq,margenPorU,margenRealPct,rotInv,invPromedio,
@@ -950,17 +954,17 @@ export default function VNMonteCarlo(){
               {l:"(-) COGS",                    v:-(stats.cogs?.p50||0),                              c:C.muted},
               {l:"= MARGEN BRUTO",              v:stats.margenBruto.p50,                              b:1,c:C.green,t:1},
               {l:"(-) GASTOS COMERCIALES",      v:-stats.gastosComerciales.p50,                       b:1,c:C.red,t:1},
-              {l:"(-) FLOOR PLAN",              v:-stats.floorPlan.p50,                               c:C.orange},
               {l:"(-) GASTOS ADMIN/G&A",        v:-stats.gastosAdmin.p50,                             c:C.red},
               {l:"= EBITDA",                    v:stats.ebitda.p50,                                   b:1,c:C.green,t:1},
               {l:"(-) D&A",                     v:-stats.da.p50,                                      c:C.muted},
               {l:"= EBIT",                      v:stats.ebit.p50,                                     b:1,c:C.blue,t:1},
-              {l:"(-) IR 32%",                  v:stats.ebit.p50>0?-stats.ebit.p50*0.32:0,            c:C.muted},
+              {l:`(-) IR ${params.tasa_imp.mean}%`, v:stats.ebit.p50>0?-stats.ebit.p50*(params.tasa_imp.mean/100):0, c:C.muted},
+              {l:"(-) Floor Plan (costo financiero inventario)", v:-stats.floorPlan.p50,              c:C.orange},
               {l:"= UTILIDAD NETA",             v:stats.utilidadNeta.p50,                             b:1,c:C.deep,t:1},
-              {l:"(-) Cargo capital",           v:-(params.capital_vn.mean*params.wacc.mean/100),     c:C.red},
+              {l:"(-) Cargo capital (Capital × WACC)", v:-(stats.capitalNeto?.p50||0)*(params.wacc.mean/100), c:C.red},
               {l:"(+) Downpayments en cartera", v:stats.downpaymentsCartera?.p50||0,                  c:C.teal},
               {l:"  Capital neto (base WACC)",  v:stats.capitalNeto?.p50||0,                          c:C.muted,indent:true},
-              {l:"= EVA",                       v:stats.eva.p50,                                      b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
+              {l:"= EVA  [NOPAT − Capital×WACC]",v:stats.eva.p50,                                    b:1,c:stats.eva.p50>=0?C.gold:C.red,t:1},
             ].map((r,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",fontFamily:"var(--mono)",fontSize:r.indent?"var(--fs-xs)":"var(--fs-sm)",fontWeight:r.b?600:400,borderTop:r.t?`1px solid ${C.border}`:"none",marginLeft:r.indent?12:0,opacity:r.indent?0.75:1}}>
                 <span style={{color:r.indent?C.muted:C.text}}>{r.l}</span><span style={{color:r.c}}>${fmtF(Math.round(r.v))}</span>
@@ -1006,7 +1010,7 @@ export default function VNMonteCarlo(){
         )}
 
 
-        <div style={{marginTop:12,textAlign:"center",fontSize:"var(--fs-xs)",color:C.muted}}>© Promundial Consulting Group · Monte Carlo VN · Nicaragua IR 32%</div>
+        <div style={{marginTop:12,textAlign:"center",fontSize:"var(--fs-xs)",color:C.muted}}>© Promundial Consulting Group · Monte Carlo VN · EVA = NOPAT − Capital×WACC</div>
       </div>
     </div>
   );
