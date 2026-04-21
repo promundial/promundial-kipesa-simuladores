@@ -82,14 +82,14 @@ const PD = {
 // mix_std: desviación estándar del % (variabilidad mes a mes)
 // precio_mean / precio_std: precio de lista promedio y σ dentro de la categoría
 const MIX_DEFAULT = [
-  {cat:"Sedan",      mix_pct:20, mix_std:3, precio_mean:22000, precio_std:2000},
-  {cat:"SUV",        mix_pct:25, mix_std:4, precio_mean:34000, precio_std:3500},
-  {cat:"Crossover",  mix_pct:20, mix_std:3, precio_mean:28000, precio_std:2500},
-  {cat:"Camioneta",  mix_pct:15, mix_std:3, precio_mean:40000, precio_std:4000},
-  {cat:"Hatchback",  mix_pct: 8, mix_std:2, precio_mean:16000, precio_std:1500},
-  {cat:"Minivan",    mix_pct: 5, mix_std:2, precio_mean:26000, precio_std:2000},
-  {cat:"Camiones",   mix_pct: 4, mix_std:2, precio_mean:55000, precio_std:6000},
-  {cat:"Otros",      mix_pct: 3, mix_std:1, precio_mean:25000, precio_std:3000},
+  {cat:"Sedan",      mix_pct:20, mix_std:3, precio_mean:22000, precio_std:2000, desc_pct:3.5, desc_std:0.5},
+  {cat:"SUV",        mix_pct:25, mix_std:4, precio_mean:34000, precio_std:3500, desc_pct:2.0, desc_std:0.5},
+  {cat:"Crossover",  mix_pct:20, mix_std:3, precio_mean:28000, precio_std:2500, desc_pct:2.5, desc_std:0.5},
+  {cat:"Camioneta",  mix_pct:15, mix_std:3, precio_mean:40000, precio_std:4000, desc_pct:1.5, desc_std:0.5},
+  {cat:"Hatchback",  mix_pct: 8, mix_std:2, precio_mean:16000, precio_std:1500, desc_pct:4.0, desc_std:1.0},
+  {cat:"Minivan",    mix_pct: 5, mix_std:2, precio_mean:26000, precio_std:2000, desc_pct:3.0, desc_std:0.5},
+  {cat:"Camiones",   mix_pct: 4, mix_std:2, precio_mean:55000, precio_std:6000, desc_pct:1.0, desc_std:0.5},
+  {cat:"Otros",      mix_pct: 3, mix_std:1, precio_mean:25000, precio_std:3000, desc_pct:3.0, desc_std:1.0},
 ];
 
 function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
@@ -104,16 +104,30 @@ const fmtF=v=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(v)
 // 2) Normaliza para que sumen 100%
 // 3) Muestrea precio de cada categoría con Normal(precio_mean, precio_std)
 // 4) Retorna precio ponderado
-function samplePrecioLista(mix){
+// Returns { precioLista, descuentoPct } both weighted by sampled mix
+function samplePrecioConDesc(mix){
   const raw=mix.map(c=>Math.max(0, c.mix_pct+randn()*c.mix_std));
   const total=raw.reduce((s,v)=>s+v,0)||1;
   const weights=raw.map(v=>v/total);
-  return mix.reduce((s,c,i)=>s+weights[i]*Math.max(0,c.precio_mean+randn()*c.precio_std),0);
+  const precioLista=mix.reduce((s,c,i)=>s+weights[i]*Math.max(0,c.precio_mean+randn()*c.precio_std),0);
+  // Per-category discount: use desc_pct/desc_std if available, else 0
+  const descuentoPct=mix.reduce((s,c,i)=>{
+    const dp=c.desc_pct||0, ds=c.desc_std||0;
+    return s+weights[i]*Math.max(0,Math.min(dp+randn()*ds,20))/100;
+  },0);
+  return{precioLista,descuentoPct};
 }
+// Keep legacy for display helpers
+function samplePrecioLista(mix){return samplePrecioConDesc(mix).precioLista;}
 // Precio ponderado determinístico (medias) — para display en tiempo real
 function precioListaMedio(mix){
   const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
   return mix.reduce((s,c)=>s+(c.mix_pct/total)*c.precio_mean,0);
+}
+// Descuento ponderado medio por categoría — display
+function descuentoMixMedio(mix){
+  const total=mix.reduce((s,c)=>s+c.mix_pct,0)||1;
+  return mix.reduce((s,c)=>s+(c.mix_pct/total)*(c.desc_pct||0),0);
 }
 // Desviación estándar implícita ponderada del precio.
 // Solo captura la variabilidad DENTRO de cada categoría (precio_std por categoría).
@@ -153,10 +167,13 @@ function simOnce(P, mix){
 
     tUtilizacion  += utilizacion;
     tProstPerd    += prospectosPerdidos;
-    const precioLista=samplePrecioLista(mix);
+    const{precioLista,descuentoPct:descCatPct}=samplePrecioConDesc(mix);
     const mbBase=S(P.margen_bruto_pct)/100;      // margen negociado con el importador
     const costoAdqUnit=precioLista*(1-mbBase);    // costo fijo al importador — no cambia con el descuento
-    const descuento=S(P.descuento_pct)/100;
+    // Descuento efectivo = mayor entre el global (param) y el ponderado por categoría
+    // Esto permite que el gerente vea el descuento sistémico del mix vs. el táctico global
+    const descGlobal=S(P.descuento_pct)/100;
+    const descuento=Math.max(descGlobal,descCatPct);  // toma el más conservador (mayor costo)
     const precio=precioLista*(1-descuento);       // precio neto al cliente
     // margenReal = precio - costoAdq = precioLista×(mbBase - descuento%)
     // Si descuento > mbBase, margenReal es negativo — el dealer vende bajo costo
@@ -369,6 +386,7 @@ function MixTable({mix, setMix}){
   const totalPct = mix.reduce((s,c)=>s+c.mix_pct,0);
   const precioMed = precioListaMedio(mix);
   const precioSd  = precioListaStd(mix);
+  const descMed   = descuentoMixMedio(mix);
   const ok = Math.abs(totalPct-100)<1;
 
   const upd=(i,field,val)=>setMix(prev=>{
@@ -376,12 +394,14 @@ function MixTable({mix, setMix}){
   });
 
   const cols=[
-    {label:"Categoría",      w:"22%"},
-    {label:"% Mix μ",        w:"10%"},
-    {label:"% Mix σ",        w:"10%"},
-    {label:"Precio μ ($)",   w:"18%"},
-    {label:"Precio σ ($)",   w:"18%"},
-    {label:"Precio neto μ",  w:"22%"},
+    {label:"Categoría",      w:"18%"},
+    {label:"% Mix μ",        w:"8%"},
+    {label:"% Mix σ",        w:"8%"},
+    {label:"Precio μ ($)",   w:"13%"},
+    {label:"Precio σ ($)",   w:"13%"},
+    {label:"Desc % μ",       w:"9%"},
+    {label:"Desc % σ",       w:"9%"},
+    {label:"P.Neto μ",       w:"22%"},
   ];
 
   return(
@@ -399,6 +419,19 @@ function MixTable({mix, setMix}){
           <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Desviación implícita σ</div>
           <div style={{fontSize:"var(--fs-lg)",fontWeight:700,color:C.blue,fontFamily:"var(--mono)"}}>
             ±${fmtF(Math.round(precioSd))}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Desc. ponderado mix μ</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,
+            color:descMed>3?C.red:descMed>2?C.orange:C.teal,fontFamily:"var(--mono)"}}>
+            {descMed.toFixed(2)}%
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:"var(--fs-xs)",color:C.muted}}>Precio neto μ (post-desc)</div>
+          <div style={{fontSize:"var(--fs-lg)",fontWeight:700,color:C.deep,fontFamily:"var(--mono)"}}>
+            ${fmtF(Math.round(precioMed*(1-descMed/100)))}
           </div>
         </div>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center"}}>
@@ -426,7 +459,11 @@ function MixTable({mix, setMix}){
           <tbody>
             {mix.map((c,i)=>{
               const w=c.mix_pct/(totalPct||1);
-              const precioNeto=c.precio_mean*(1-0); // sin descuento aquí, es precio de lista
+              const dp=c.desc_pct||0;
+              const precioNeto=c.precio_mean*(1-dp/100);
+              const inp={width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
+                fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
+                borderRadius:2,background:C.light,textAlign:"right"};
               return(
                 <tr key={i} style={{background:i%2===0?C.light:C.card,
                   borderBottom:`1px solid ${C.border}`}}>
@@ -440,40 +477,44 @@ function MixTable({mix, setMix}){
                   <td style={{padding:"3px 4px"}}>
                     <input type="number" value={c.mix_pct}
                       onChange={e=>upd(i,"mix_pct",parseFloat(e.target.value))}
-                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
-                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
-                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                      style={inp}/>
                   </td>
                   {/* % Mix σ */}
                   <td style={{padding:"3px 4px"}}>
                     <input type="number" value={c.mix_std}
                       onChange={e=>upd(i,"mix_std",parseFloat(e.target.value))}
-                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
-                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
-                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                      style={inp}/>
                   </td>
                   {/* Precio μ */}
                   <td style={{padding:"3px 4px"}}>
                     <input type="number" value={c.precio_mean}
                       onChange={e=>upd(i,"precio_mean",parseFloat(e.target.value))}
-                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
-                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
-                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                      style={inp}/>
                   </td>
                   {/* Precio σ */}
                   <td style={{padding:"3px 4px"}}>
                     <input type="number" value={c.precio_std}
                       onChange={e=>upd(i,"precio_std",parseFloat(e.target.value))}
-                      style={{width:"100%",padding:"2px 4px",fontSize:"var(--fs-xs)",
-                        fontFamily:"var(--mono)",border:`1px solid ${C.border}`,
-                        borderRadius:2,background:C.light,textAlign:"right"}}/>
+                      style={inp}/>
                   </td>
-                  {/* Precio neto ponderado (display) */}
-                  <td style={{padding:"4px 8px",fontFamily:"var(--mono)",
-                    color:C.muted,textAlign:"right"}}>
-                    <span style={{color:C.deep,fontWeight:600}}>${fmtF(Math.round(c.precio_mean))}</span>
-                    <span style={{color:C.muted,fontSize:"var(--fs-xs)",marginLeft:4}}>
-                      ({(w*100).toFixed(1)}%)
+                  {/* Desc % μ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={dp} min={0} max={20} step={0.5}
+                      onChange={e=>upd(i,"desc_pct",parseFloat(e.target.value))}
+                      style={{...inp,border:`1px solid ${dp>3?C.red:dp>2?C.orange:C.border}`,
+                        color:dp>3?C.red:dp>2?C.orange:C.text}}/>
+                  </td>
+                  {/* Desc % σ */}
+                  <td style={{padding:"3px 4px"}}>
+                    <input type="number" value={c.desc_std||0} min={0} max={5} step={0.25}
+                      onChange={e=>upd(i,"desc_std",parseFloat(e.target.value))}
+                      style={inp}/>
+                  </td>
+                  {/* Precio neto = precio × (1 − desc%) */}
+                  <td style={{padding:"4px 8px",fontFamily:"var(--mono)",textAlign:"right"}}>
+                    <span style={{color:C.deep,fontWeight:600}}>${fmtF(Math.round(precioNeto))}</span>
+                    <span style={{color:dp>3?C.red:C.muted,fontSize:"var(--fs-xs)",marginLeft:4}}>
+                      −{dp.toFixed(1)}% ({(w*100).toFixed(1)}%)
                     </span>
                   </td>
                 </tr>
@@ -487,6 +528,7 @@ function MixTable({mix, setMix}){
 }
 
 // ═══ MAIN ═══
+
 export default function VNMonteCarlo(){
   const[params,setParams]=useState(()=>{
     // Always initialize from PD — guarantees all keys exist including newly added ones
@@ -613,9 +655,11 @@ export default function VNMonteCarlo(){
     // Mix category changes
     if(gsResult.mix){
       gsResult.mix.forEach((c,i)=>{
-        const orig=MIX_DEFAULT[i]||origRef.current._mix?.[i];
+        // Always compare against the mix that was live when GS started (origRef._mix),
+        // NOT against MIX_DEFAULT which may differ from what the user had configured.
+        const orig=origRef.current._mix?.[i];
         if(!orig)return;
-        const o=orig.mix_pct,n=c.mix_pct,p=((n-o)/o)*100;
+        const o=orig.mix_pct,n=c.mix_pct,p=o>0?((n-o)/o)*100:0;
         if(Math.abs(p)>0.5)ch.push({k:`mix_${c.cat}`,label:`Mix ${c.cat}`,unit:"%",o,n,p,isMix:true});
       });
     }
@@ -732,20 +776,31 @@ export default function VNMonteCarlo(){
                   <MixTable mix={mix} setMix={syncSetMix}/>
                   {(()=>{
                     const mb=params.margen_bruto_pct?.mean||0;
-                    const desc=params.descuento_pct?.mean||0;
-                    const real=mb-desc;
+                    const descGlobal=params.descuento_pct?.mean||0;
+                    const descMix=descuentoMixMedio(mix);
+                    const descEfectivo=Math.max(descGlobal,descMix);
+                    const real=mb-descEfectivo;
                     return(
-                      <div style={{marginTop:6,padding:"5px 8px",borderRadius:4,
+                      <div style={{marginTop:6,padding:"7px 10px",borderRadius:4,
                         background:real<0?"#B3404020":real<3?"#D4772C20":"#1A5C3820",
-                        border:`1px solid ${real<0?C.red:real<3?C.orange:C.green}50`,
-                        display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)"}}>
-                          Margen real = {mb.toFixed(1)}% − {desc.toFixed(1)}% desc. =
-                        </span>
-                        <span style={{fontSize:"var(--fs-sm)",fontWeight:700,fontFamily:"var(--mono)",
-                          color:real<0?C.red:real<3?C.orange:C.green}}>
-                          {real.toFixed(1)}% {real<0?"⚠ bajo costo":real<3?"⚠ margen ajustado":"✓"}
-                        </span>
+                        border:`1px solid ${real<0?C.red:real<3?C.orange:C.green}50`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.muted,fontFamily:"var(--mono)"}}>
+                            Margen bruto = {mb.toFixed(1)}%
+                          </span>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.muted}}>−</span>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.orange,fontFamily:"var(--mono)"}}>
+                            {descEfectivo.toFixed(2)}% desc. efectivo
+                          </span>
+                          <span style={{fontSize:"var(--fs-xs)",color:C.muted}}>=</span>
+                          <span style={{fontSize:"var(--fs-sm)",fontWeight:700,fontFamily:"var(--mono)",
+                            color:real<0?C.red:real<3?C.orange:C.green}}>
+                            {real.toFixed(2)}% {real<0?"⚠ VENTA BAJO COSTO":real<3?"⚠ margen ajustado":"✓ margen OK"}
+                          </span>
+                        </div>
+                        <div style={{fontSize:"var(--fs-xs)",color:C.muted,marginTop:3,fontFamily:"var(--mono)"}}>
+                          Desc. global param: {descGlobal.toFixed(1)}% · Desc. ponderado mix: {descMix.toFixed(2)}% · Efectivo: max({descGlobal.toFixed(1)}%, {descMix.toFixed(2)}%) = {descEfectivo.toFixed(2)}%
+                        </div>
                       </div>
                     );
                   })()}
@@ -943,6 +998,7 @@ export default function VNMonteCarlo(){
             )}
           </div>
         )}
+
 
         <div style={{marginTop:12,textAlign:"center",fontSize:"var(--fs-xs)",color:C.muted}}>© Promundial Consulting Group · Monte Carlo VN · Nicaragua IR 32%</div>
       </div>
